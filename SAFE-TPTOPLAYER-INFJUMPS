@@ -1,0 +1,406 @@
+--Safe Zone
+--// LocalScript (put in StarterPlayerScripts or inject)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+
+-- Constants
+local LOW_HP_THRESHOLD  = 4700
+local SAFE_HP_THRESHOLD = 8000
+local ESCAPE_Y_OFFSET   = 6000
+local GROUND_BUFFER     = 1000  -- If Y drops below groundY + 1000 while escaped → assume manual return, reset state
+
+-- Variables
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid", 8)
+local savedPosition = nil
+local groundY = nil
+local isEscaped = false
+local isEnabled = true
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoEscapeGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = PlayerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 220, 0, 70)
+frame.Position = UDim2.new(0.5, -110, 0, 20)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = frame
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(1, -20, 0.6, -10)
+toggleButton.Position = UDim2.new(0, 10, 0, 10)
+toggleButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+toggleButton.Text = "Auto-Escape: OFF"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextSize = 16
+toggleButton.Parent = frame
+
+local buttonCorner = Instance.new("UICorner")
+buttonCorner.CornerRadius = UDim.new(0, 4)
+buttonCorner.Parent = toggleButton
+
+-- Status Label
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -20, 0.35, -10)
+statusLabel.Position = UDim2.new(0, 10, 0.65, 0)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Status: Ground"
+statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextSize = 14
+statusLabel.TextXAlignment = Enum.TextXAlignment.Center
+statusLabel.Parent = frame
+
+-- Toggle logic
+toggleButton.MouseButton1Click:Connect(function()
+    isEnabled = not isEnabled
+    toggleButton.Text = "Auto-Escape: " .. (isEnabled and "ON" or "OFF")
+    toggleButton.BackgroundColor3 = isEnabled and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
+end)
+
+-- Reset state function
+local function resetState()
+    isEscaped = false
+    savedPosition = nil
+    groundY = nil
+    statusLabel.Text = "Status: Ground"
+    statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+end
+
+-- Update character on respawn
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    humanoid = newChar:WaitForChild("Humanoid", 8)
+    resetState()
+end)
+
+-- Main loop
+RunService.Heartbeat:Connect(function()
+    if not isEnabled or not humanoid or not character or not character.Parent then
+        return
+    end
+
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local currentHP = humanoid.Health
+
+    -- Update status
+    if isEscaped then
+        statusLabel.Text = "Status: Escaped (Y: " .. math.floor(hrp.Position.Y) .. ")"
+        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+    else
+        statusLabel.Text = "Status: Ground (HP: " .. math.floor(currentHP) .. ")"
+        statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    end
+
+    -- 1. Detect manual return to ground (key fix!)
+    if isEscaped and groundY and hrp.Position.Y < groundY + GROUND_BUFFER then
+        resetState()
+        print("Detected manual return to ground → reset state (will re-escape if low HP)")
+        return  -- Exit early this frame
+    end
+
+    -- 2. Escape if low HP
+    if currentHP < LOW_HP_THRESHOLD and not isEscaped then
+        groundY = hrp.Position.Y
+        savedPosition = hrp.CFrame
+        
+        -- Teleport UP (preserves facing direction now!)
+        local newPos = savedPosition.Position + Vector3.new(0, ESCAPE_Y_OFFSET, 0)
+        hrp.CFrame = CFrame.lookAt(newPos, newPos + savedPosition.LookVector)
+        
+        isEscaped = true
+        print("Low HP → escaped to Y +" .. ESCAPE_Y_OFFSET)
+        return
+    end
+
+    -- 3. Auto-return if safe HP
+    if currentHP >= SAFE_HP_THRESHOLD and isEscaped and savedPosition then
+        hrp.CFrame = savedPosition
+        resetState()
+        print("HP safe → returned to previous position")
+    end
+end)
+
+--inf jumps
+--[[
+	WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+]]
+local InfiniteJumpEnabled = true
+game:GetService("UserInputService").JumpRequest:connect(function()
+	if InfiniteJumpEnabled then
+		game:GetService"Players".LocalPlayer.Character:FindFirstChildOfClass'Humanoid':ChangeState("Jumping")
+	end
+end)
+
+--TELEPORT script to players
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local localPlayer = Players.LocalPlayer
+
+-- Create ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PlayerButtons"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+-- Create ScrollingFrame instead of Frame for player list
+local frame = Instance.new("ScrollingFrame")
+frame.Size = UDim2.new(0, 200, 0, 300)
+frame.Position = UDim2.new(0, 270, 0, 10)  -- shifted to the right
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 0
+frame.Visible = false
+frame.Parent = screenGui
+
+frame.CanvasSize = UDim2.new(0, 0, 0, 0) -- initially no scrolling
+frame.ScrollBarThickness = 8
+frame.VerticalScrollBarInset = Enum.ScrollBarInset.Always
+
+-- Button to show/hide player list
+local toggleListButton = Instance.new("TextButton")
+toggleListButton.Text = "Select Player"
+toggleListButton.Size = UDim2.new(0, 130, 0, 30)
+toggleListButton.Position = UDim2.new(0, 10, 0, 10)
+toggleListButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+toggleListButton.BorderSizePixel = 0
+toggleListButton.TextColor3 = Color3.new(1, 1, 1)
+toggleListButton.Parent = screenGui
+
+-- Button to enable/disable teleport
+local teleportToggleButton = Instance.new("TextButton")
+teleportToggleButton.Text = "Teleport OFF"
+teleportToggleButton.Size = UDim2.new(0, 130, 0, 30)
+teleportToggleButton.Position = UDim2.new(0, 10, 0, 50)
+teleportToggleButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+teleportToggleButton.BorderSizePixel = 0
+teleportToggleButton.TextColor3 = Color3.new(1, 1, 1)
+teleportToggleButton.Parent = screenGui
+
+-- Hide all button
+local hideAllButton = Instance.new("TextButton")
+hideAllButton.Text = "Hide All"
+hideAllButton.Size = UDim2.new(0, 130, 0, 30)
+hideAllButton.Position = UDim2.new(0, 10, 0, 90)
+hideAllButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+hideAllButton.BorderSizePixel = 0
+hideAllButton.TextColor3 = Color3.new(1, 1, 1)
+hideAllButton.Parent = screenGui
+
+-- Show all button (small square)
+local showAllButton = Instance.new("TextButton")
+showAllButton.Text = "▶" -- small arrow
+showAllButton.Size = UDim2.new(0, 30, 0, 30) -- small square 30x30
+showAllButton.Position = UDim2.new(0, 10, 0, 90) -- same position as hideAllButton
+showAllButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+showAllButton.BorderSizePixel = 0
+showAllButton.TextColor3 = Color3.new(1, 1, 1)
+showAllButton.Visible = false
+showAllButton.Parent = screenGui
+
+-- Teleport position toggle button
+local positionButton = Instance.new("TextButton")
+positionButton.Text = "Position: Behind"
+positionButton.Size = UDim2.new(0, 130, 0, 30)
+positionButton.Position = UDim2.new(0, 10, 0, 130)
+positionButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+positionButton.BorderSizePixel = 0
+positionButton.TextColor3 = Color3.new(1, 1, 1)
+positionButton.Parent = screenGui
+
+-- + and - buttons for teleport distance
+local plusButton = Instance.new("TextButton")
+plusButton.Text = "+"
+plusButton.Size = UDim2.new(0, 30, 0, 30)
+plusButton.Position = UDim2.new(0, 150, 0, 130)
+plusButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+plusButton.BorderSizePixel = 0
+plusButton.TextColor3 = Color3.new(1, 1, 1)
+plusButton.Parent = screenGui
+
+local minusButton = Instance.new("TextButton")
+minusButton.Text = "-"
+minusButton.Size = UDim2.new(0, 30, 0, 30)
+minusButton.Position = UDim2.new(0, 190, 0, 130)
+minusButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+minusButton.BorderSizePixel = 0
+minusButton.TextColor3 = Color3.new(1, 1, 1)
+minusButton.Parent = screenGui
+
+-- Distance label
+local distanceLabel = Instance.new("TextLabel")
+distanceLabel.Text = "Distance: 4.0"
+distanceLabel.Size = UDim2.new(0, 200, 0, 30)
+distanceLabel.Position = UDim2.new(0, 10, 0, 170)
+distanceLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+distanceLabel.BorderSizePixel = 0
+distanceLabel.TextColor3 = Color3.new(1, 1, 1)
+distanceLabel.Parent = screenGui
+
+-- State variables
+local selectedPlayer = nil
+local teleportEnabled = false
+local positionBehind = true
+local distanceFromTarget = 4.0
+
+-- Function to create player button
+local function createPlayerButton(player)
+    local btn = Instance.new("TextButton")
+    btn.Text = player.Name
+    btn.Size = UDim2.new(0, 180, 0, 25)
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.BorderSizePixel = 0
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Parent = frame
+
+    btn.MouseButton1Click:Connect(function()
+        selectedPlayer = player
+        -- Update button colors
+        for _, child in pairs(frame:GetChildren()) do
+            if child:IsA("TextButton") then
+                if child.Text == player.Name then
+                    child.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+                else
+                    child.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+                end
+            end
+        end
+    end)
+
+    return btn
+end
+
+-- Handler for showing/hiding player list
+toggleListButton.MouseButton1Click:Connect(function()
+    frame.Visible = not frame.Visible
+    if frame.Visible then
+        -- Clear old buttons
+        for _, child in pairs(frame:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
+        -- Create buttons for all players except local
+        local yOffset = 0
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= localPlayer then
+                local btn = createPlayerButton(player)
+                btn.Position = UDim2.new(0, 10, 0, yOffset)
+                yOffset = yOffset + 30
+                if player == selectedPlayer then
+                    btn.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+                end
+            end
+        end
+        frame.CanvasSize = UDim2.new(0, 0, 0, yOffset)
+    end
+end)
+
+-- Enable/disable teleport
+teleportToggleButton.MouseButton1Click:Connect(function()
+    teleportEnabled = not teleportEnabled
+    if teleportEnabled then
+        teleportToggleButton.Text = "Teleport ON"
+    else
+        teleportToggleButton.Text = "Teleport OFF"
+    end
+end)
+
+-- Hide all buttons and panel
+hideAllButton.MouseButton1Click:Connect(function()
+    toggleListButton.Visible = false
+    teleportToggleButton.Visible = false
+    hideAllButton.Visible = false
+    positionButton.Visible = false
+    plusButton.Visible = false
+    minusButton.Visible = false
+    distanceLabel.Visible = false
+    frame.Visible = false
+    showAllButton.Visible = true
+end)
+
+-- Show all buttons and panel
+showAllButton.MouseButton1Click:Connect(function()
+    toggleListButton.Visible = true
+    teleportToggleButton.Visible = true
+    hideAllButton.Visible = true
+    positionButton.Visible = true
+    plusButton.Visible = true
+    minusButton.Visible = true
+    distanceLabel.Visible = true
+    showAllButton.Visible = false
+end)
+
+-- Toggle teleport position
+positionButton.MouseButton1Click:Connect(function()
+    positionBehind = not positionBehind
+    if positionBehind then
+        positionButton.Text = "Position: Behind"
+    else
+        positionButton.Text = "Position: In Front"
+    end
+end)
+
+-- Increase distance
+plusButton.MouseButton1Click:Connect(function()
+    distanceFromTarget = distanceFromTarget + 0.5
+    distanceLabel.Text = "Distance: " .. string.format("%.1f", distanceFromTarget)
+end)
+
+-- Decrease distance
+minusButton.MouseButton1Click:Connect(function()
+    distanceFromTarget = math.max(0.5, distanceFromTarget - 0.5)
+    distanceLabel.Text = "Distance: " .. string.format("%.1f", distanceFromTarget)
+end)
+
+-- Teleport function
+local function teleportToPlayer(targetPlayer)
+    if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        return
+    end
+    local targetHRP = targetPlayer.Character.HumanoidRootPart
+    local localCharacter = localPlayer.Character
+    if not localCharacter or not localCharacter:FindFirstChild("HumanoidRootPart") then
+        return
+    end
+    local localHRP = localCharacter.HumanoidRootPart
+
+    local targetCFrame = targetHRP.CFrame
+    local offset
+    if positionBehind then
+        offset = -targetHRP.CFrame.LookVector * distanceFromTarget
+        localHRP.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position + offset + targetHRP.CFrame.LookVector)
+    else
+        offset = targetHRP.CFrame.LookVector * distanceFromTarget
+        localHRP.CFrame = CFrame.new(targetHRP.Position + offset, targetHRP.Position)
+    end
+end
+
+-- Continuous teleportation when enabled
+RunService.Heartbeat:Connect(function()
+    if teleportEnabled and selectedPlayer then
+        teleportToPlayer(selectedPlayer)
+    end
+end)
+
+-- Optional: Clean up if script is destroyed (good practice)
+game:BindToClose(function()
+    if Loop then Loop:Disconnect() end
+    if Connection then Connection:Disconnect() end
+end)
