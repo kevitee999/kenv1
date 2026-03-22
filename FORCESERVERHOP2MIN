@@ -1,0 +1,163 @@
+--// AFK Server Hopper - Rejoin on fail
+--// Detects real inactivity (movement + input)
+--// Waits ~4 minutes before hopping
+
+local Players             = game:GetService("Players")
+local RunService          = game:GetService("RunService")
+local UserInputService    = game:GetService("UserInputService")
+local TeleportService     = game:GetService("TeleportService")
+local HttpService         = game:GetService("HttpService")
+local StarterGui          = game:GetService("StarterGui")
+
+local player              = Players.LocalPlayer
+local AFK_THRESHOLD       = 120     -- 4 minutes = 240 seconds
+local CHECK_INTERVAL      = 2       -- how often we check (seconds)
+local WARN_BEFORE_HOP     = 15      -- show warning X seconds before hop
+
+local lastActivityTime    = tick()
+local isAfk               = false
+local warned              = false
+
+-- ────────────────────────────────────────────────
+--  Track any kind of player activity
+-- ────────────────────────────────────────────────
+local function registerActivity()
+    lastActivityTime = tick()
+    isAfk = false
+    warned = false
+end
+
+-- Mouse / keyboard / gamepad / touch
+for _, inputType in ipairs({
+    Enum.UserInputType.MouseMovement,
+    Enum.UserInputType.MouseButton1,
+    Enum.UserInputType.MouseButton2,
+    Enum.UserInputType.MouseWheel,
+    Enum.UserInputType.Keyboard,
+    Enum.UserInputType.Gamepad1,
+    Enum.UserInputType.Touch,
+}) do
+    UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == inputType then
+            registerActivity()
+        end
+    end)
+
+    UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType == inputType then
+            registerActivity()
+        end
+    end)
+end
+
+-- Also track character movement
+local function onCharacterAdded(char)
+    local root = char:WaitForChild("HumanoidRootPart", 8)
+    local humanoid = char:WaitForChild("Humanoid", 8)
+
+    if not root or not humanoid then return end
+
+    local lastPos = root.Position
+
+    RunService.Heartbeat:Connect(function()
+        if not root.Parent then return end
+
+        local currentPos = root.Position
+        if (currentPos - lastPos).Magnitude > 0.4 then
+            registerActivity()
+            lastPos = currentPos
+        end
+    end)
+end
+
+if player.Character then
+    onCharacterAdded(player.Character)
+end
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- ────────────────────────────────────────────────
+--  Main AFK checker loop
+-- ────────────────────────────────────────────────
+task.spawn(function()
+    while true do
+        task.wait(CHECK_INTERVAL)
+
+        local timeIdle = tick() - lastActivityTime
+
+        if timeIdle >= AFK_THRESHOLD then
+            if not isAfk then
+                isAfk = true
+                warned = false
+            end
+
+            -- Warning phase
+            if timeIdle >= AFK_THRESHOLD - WARN_BEFORE_HOP and not warned then
+                warned = true
+                StarterGui:SetCore("SendNotification", {
+                    Title = "AFK Detected",
+                    Text = "Server hopping in "..WARN_BEFORE_HOP.." seconds...\nMove to cancel.",
+                    Duration = WARN_BEFORE_HOP + 2,
+                    Icon = "rbxassetid://6031280882" -- some alert icon
+                })
+            end
+
+            -- Time to hop
+            if timeIdle >= AFK_THRESHOLD then
+                StarterGui:SetCore("SendNotification", {
+                    Title = "Server Hop",
+                    Text = "Attempting to join a new server...",
+                    Duration = 6
+                })
+
+                pcall(function()
+                    -- Method 1: Teleport to this place (most reliable public server hop)
+                    local placeId = game.PlaceId
+                    TeleportService:TeleportAsync(placeId, {player})
+                end)
+
+                -- If teleport didn't work after ~8 seconds → force rejoin
+                task.delay(8, function()
+                    if player.Parent then  -- still in game = failed to teleport
+                        StarterGui:SetCore("SendNotification", {
+                            Title = "Hop failed",
+                            Text = "Rejoining same server...",
+                            Duration = 5
+                        })
+                        task.wait(1.2)
+                        game:GetService("TeleportService"):Teleport(game.PlaceId, player)
+                    end
+                end)
+            end
+        else
+            -- Player became active again
+            if isAfk then
+                isAfk = false
+                StarterGui:SetCore("SendNotification", {
+                    Title = "Activity Detected",
+                    Text = "Server hop cancelled.",
+                    Duration = 4
+                })
+            end
+        end
+    end
+end)
+
+-- Optional: small on-screen label (can be removed)
+local sg = Instance.new("ScreenGui", game.CoreGui)
+sg.Name = "AFK_Hopper_Label"
+sg.ResetOnSpawn = false
+
+local label = Instance.new("TextLabel", sg)
+label.Size = UDim2.new(0,220,0,38)
+label.Position = UDim2.new(0.5, -110, 0, 8)
+label.BackgroundTransparency = 0.4
+label.BackgroundColor3 = Color3.fromRGB(10,10,15)
+label.TextColor3 = Color3.fromRGB(200,220,255)
+label.Font = Enum.Font.GothamSemibold
+label.TextSize = 15
+label.TextStrokeTransparency = 0.7
+label.TextStrokeColor3 = Color3.new(0,0,0)
+label.Text = "AFK Hopper active • 4 min"
+Instance.new("UICorner", label).CornerRadius = UDim.new(0,8)
+
+print("AFK Server Hopper loaded — will hop after 4 min of real inactivity")
