@@ -10,7 +10,7 @@ local HttpService         = game:GetService("HttpService")
 local StarterGui          = game:GetService("StarterGui")
 
 local player              = Players.LocalPlayer
-local AFK_THRESHOLD       = 120     -- 4 minutes = 240 seconds
+local AFK_THRESHOLD       = 30     -- 4 minutes = 240 seconds
 local CHECK_INTERVAL      = 2       -- how often we check (seconds)
 local WARN_BEFORE_HOP     = 15      -- show warning X seconds before hop
 
