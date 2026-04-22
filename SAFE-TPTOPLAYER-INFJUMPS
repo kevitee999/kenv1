@@ -9,7 +9,7 @@ local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 -- Constants
 local LOW_HP_THRESHOLD  = 3700
 local SAFE_HP_THRESHOLD = 8000
-local ESCAPE_Y_OFFSET   = 60000
+local ESCAPE_Y_OFFSET   = 110000
 local GROUND_BUFFER     = 1000  -- If Y drops below groundY + 1000 while escaped → assume manual return, reset state
 
 -- Variables
