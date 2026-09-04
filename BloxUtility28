@@ -1,0 +1,393 @@
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- Variables
+local flying = false
+local flySpeed = 50
+local infJump = false
+local energyBlocked = false
+local safeMode = false
+local safeModeHp = 38
+local safeModeTriggered = false
+local noclip = false
+
+local configFile = "TinyGuiSettings.json"
+
+-- ==========================
+-- CONFIGURATION SYSTEM
+-- ==========================
+local function SaveConfig()
+    if writefile then
+        local configData = {
+            flySpeed = flySpeed,
+            infJump = infJump,
+            energyBlocked = energyBlocked,
+            safeMode = safeMode,
+            safeModeHp = safeModeHp,
+            noclip = noclip
+        }
+        pcall(function()
+            writefile(configFile, HttpService:JSONEncode(configData))
+        end)
+    end
+end
+
+local function LoadConfig()
+    if isfile and isfile(configFile) and readfile then
+        pcall(function()
+            local decoded = HttpService:JSONDecode(readfile(configFile))
+            if decoded then
+                flySpeed = decoded.flySpeed or 50
+                infJump = decoded.infJump or false
+                energyBlocked = decoded.energyBlocked or false
+                safeMode = decoded.safeMode or false
+                safeModeHp = decoded.safeModeHp or 38
+                noclip = decoded.noclip or false
+            end
+        end)
+    end
+end
+
+LoadConfig()
+
+-- ==========================
+-- HOOKING (Energy Saver)
+-- ==========================
+local success, err = pcall(function()
+    local mt = getrawmetatable(game)
+    local oldNamecall = mt.__namecall
+
+    setreadonly(mt, false)
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if energyBlocked and method == "FireServer" and tostring(self) == "CommE" then
+            if args[1] == "Dodge" or args[1] == "DoubleJump" then
+                return -- Block remote
+            end
+        end
+        
+        return oldNamecall(self, ...)
+    end)
+    setreadonly(mt, true)
+end)
+if not success then warn("Failed to hook metatable: " .. tostring(err)) end
+
+-- ==========================
+-- UI CONSTRUCTION
+-- ==========================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "TinyFlyGui"
+ScreenGui.ResetOnSpawn = false
+
+if gethui then ScreenGui.Parent = gethui() 
+elseif syn and syn.protect_gui then syn.protect_gui(ScreenGui) ScreenGui.Parent = game.CoreGui
+else ScreenGui.Parent = game.CoreGui end
+
+-- Bigger Ping Button with clean, bright green text
+local PingBtn = Instance.new("TextButton")
+PingBtn.Size = UDim2.new(0, 105, 0, 28)
+PingBtn.Position = UDim2.new(0, 20, 0, 20)
+PingBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+PingBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
+PingBtn.TextColor3 = Color3.fromRGB(80, 255, 120)
+PingBtn.TextSize = 13
+PingBtn.Font = Enum.Font.GothamBold
+PingBtn.Text = "Ping: 0"
+PingBtn.Parent = ScreenGui
+
+-- Main Frame (adjusted position to account for larger ping button)
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 110, 0, 165) 
+MainFrame.Position = UDim2.new(0, 20, 0, 52)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+MainFrame.Visible = false
+MainFrame.Parent = ScreenGui
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = MainFrame
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 2)
+
+-- Robust Click & Drag Logic (Fixes close/open toggle bug)
+local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+local movedDistance = 0
+
+PingBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = PingBtn.Position
+        movedDistance = 0
+        
+        local connection
+        connection = input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+                connection:Disconnect()
+                if movedDistance < 6 then
+                    MainFrame.Visible = not MainFrame.Visible
+                end
+            end
+        end)
+    end
+end)
+
+PingBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        movedDistance = delta.Magnitude
+        PingBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Accurate Roblox Ping Loop
+task.spawn(function()
+    while task.wait(0.5) do
+        local pingVal = 0
+        local ok, netPing = pcall(function()
+            return LocalPlayer:GetNetworkPing()
+        end)
+        if ok and netPing then
+            pingVal = math.round(netPing * 1000)
+        else
+            pcall(function()
+                pingVal = math.round(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+            end)
+        end
+        PingBtn.Text = "Ping: " .. tostring(pingVal)
+    end
+end)
+
+local function createButton(text, parent)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 18)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    btn.BorderColor3 = Color3.fromRGB(60, 60, 60)
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.TextSize = 10
+    btn.Font = Enum.Font.Code
+    btn.Text = text
+    btn.Parent = parent
+    return btn
+end
+
+-- ==========================
+-- UI ELEMENTS & LOGIC
+-- ==========================
+local FlyBtn = createButton("Fly [P]: OFF", MainFrame)
+
+local SpeedBox = Instance.new("TextBox")
+SpeedBox.Size = UDim2.new(1, 0, 0, 18)
+SpeedBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+SpeedBox.BorderColor3 = Color3.fromRGB(60, 60, 60)
+SpeedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedBox.TextSize = 10
+SpeedBox.Font = Enum.Font.Code
+SpeedBox.Text = "Speed: " .. tostring(flySpeed)
+SpeedBox.Parent = MainFrame
+
+local InfJumpBtn = createButton("Inf Jump: " .. (infJump and "ON" or "OFF"), MainFrame)
+if infJump then InfJumpBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
+
+local EnergyBtn = createButton("Energy Save: " .. (energyBlocked and "ON" or "OFF"), MainFrame)
+if energyBlocked then EnergyBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
+
+local SafeModeBtn = createButton("Safe Mode: " .. (safeMode and "ON" or "OFF"), MainFrame)
+if safeMode then SafeModeBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
+
+local SafeModeHpBox = Instance.new("TextBox")
+SafeModeHpBox.Size = UDim2.new(1, 0, 0, 18)
+SafeModeHpBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+SafeModeHpBox.BorderColor3 = Color3.fromRGB(60, 60, 60)
+SafeModeHpBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+SafeModeHpBox.TextSize = 10
+SafeModeHpBox.Font = Enum.Font.Code
+SafeModeHpBox.Text = "Safe HP%: " .. tostring(safeModeHp)
+SafeModeHpBox.Parent = MainFrame
+
+local NoclipBtn = createButton("Noclip: " .. (noclip and "ON" or "OFF"), MainFrame)
+if noclip then NoclipBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
+
+
+-- FLY LOGIC
+local function toggleFly()
+    flying = not flying
+    FlyBtn.Text = "Fly [P]: " .. (flying and "ON" or "OFF")
+    FlyBtn.TextColor3 = flying and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+    
+    if flying then
+        workspace.Gravity = 0
+    else
+        workspace.Gravity = 196.2
+    end
+end
+
+FlyBtn.MouseButton1Click:Connect(toggleFly)
+
+RunService.RenderStepped:Connect(function(dt)
+    if flying and LocalPlayer.Character then
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            
+            local moveDir = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir += Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir -= Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir -= Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir += Camera.CFrame.RightVector end
+            
+            if moveDir.Magnitude > 0 then
+                moveDir = moveDir.Unit
+            end
+            
+            hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + Camera.CFrame.LookVector)
+            hrp.CFrame = hrp.CFrame + (moveDir * flySpeed * dt)
+        end
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.P then
+        toggleFly()
+    end
+end)
+
+-- SPEED BOX LOGIC
+SpeedBox.FocusLost:Connect(function()
+    local num = tonumber(string.match(SpeedBox.Text, "%d+"))
+    if num then 
+        flySpeed = num 
+        SpeedBox.Text = "Speed: " .. tostring(num)
+        SaveConfig()
+    else
+        SpeedBox.Text = "Speed: " .. tostring(flySpeed)
+    end
+end)
+
+-- INF JUMP LOGIC
+InfJumpBtn.MouseButton1Click:Connect(function()
+    infJump = not infJump
+    InfJumpBtn.Text = "Inf Jump: " .. (infJump and "ON" or "OFF")
+    InfJumpBtn.TextColor3 = infJump and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+    SaveConfig()
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if infJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+-- ENERGY LOGIC
+EnergyBtn.MouseButton1Click:Connect(function()
+    energyBlocked = not energyBlocked
+    EnergyBtn.Text = "Energy Save: " .. (energyBlocked and "ON" or "OFF")
+    EnergyBtn.TextColor3 = energyBlocked and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+    SaveConfig()
+end)
+
+-- SAFE MODE LOGIC
+SafeModeBtn.MouseButton1Click:Connect(function()
+    safeMode = not safeMode
+    SafeModeBtn.Text = "Safe Mode: " .. (safeMode and "ON" or "OFF")
+    SafeModeBtn.TextColor3 = safeMode and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+    if not safeMode then
+        safeModeTriggered = false
+        if LocalPlayer.Character then
+            local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then hrp.Anchored = false end
+        end
+    end
+    SaveConfig()
+end)
+
+SafeModeHpBox.FocusLost:Connect(function()
+    local num = tonumber(string.match(SafeModeHpBox.Text, "%d+"))
+    if num then
+        safeModeHp = num
+        SafeModeHpBox.Text = "Safe HP%: " .. tostring(num)
+        SaveConfig()
+    else
+        SafeModeHpBox.Text = "Safe HP%: " .. tostring(safeModeHp)
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    safeModeTriggered = false
+end)
+
+RunService.Heartbeat:Connect(function()
+    if safeMode and LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        
+        if hum and hrp and hum.Health > 0 then
+            if safeModeTriggered then
+                if hum.Health >= (hum.MaxHealth * 0.65) then
+                    safeModeTriggered = false
+                    hrp.Anchored = false
+                else
+                    if hrp.Position.Y < 20000 then
+                        -- Actively fly straight up at a physical speed of 250 (fully replicates to friends/server)
+                        hrp.AssemblyLinearVelocity = Vector3.new(0, 250, 0)
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                        hrp.Anchored = false
+                    else
+                        -- Reached Y = 20000, lock in place securely until health recovers
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                        hrp.CFrame = CFrame.new(hrp.Position.X, 20000, hrp.Position.Z)
+                        hrp.Anchored = true
+                    end
+                end
+            else
+                if hum.Health <= (hum.MaxHealth * (safeModeHp / 100)) then
+                    safeModeTriggered = true
+                    hrp.Anchored = false
+                end
+            end
+        end
+    else
+        if safeModeTriggered and LocalPlayer.Character then
+            local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then hrp.Anchored = false end
+        end
+        safeModeTriggered = false
+    end
+end)
+
+-- NOCLIP LOGIC
+NoclipBtn.MouseButton1Click:Connect(function()
+    noclip = not noclip
+    NoclipBtn.Text = "Noclip: " .. (noclip and "ON" or "OFF")
+    NoclipBtn.TextColor3 = noclip and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+    SaveConfig()
+end)
+
+RunService.Stepped:Connect(function()
+    if noclip and LocalPlayer.Character then
+        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
