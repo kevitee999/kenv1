@@ -27,6 +27,23 @@ local sea3 = (game.PlaceId == 7449423635 or game.PlaceId == 100117331123089)
 local configFile = "TinyGuiSettings.json"
 
 -- ==========================
+-- ROBUST TELEPORT HELPER (Fixes 1/10 failure rate)
+-- ==========================
+local function requestPortal(pos)
+    task.spawn(function()
+        pcall(function()
+            local remotes = ReplicatedStorage:WaitForChild("Remotes", 3)
+            if remotes then
+                local commF = remotes:WaitForChild("CommF_", 3)
+                if commF then
+                    commF:InvokeServer("requestEntrance", pos)
+                end
+            end
+        end)
+    end)
+end
+
+-- ==========================
 -- CONFIGURATION SYSTEM
 -- ==========================
 local function SaveConfig()
@@ -360,27 +377,19 @@ end)
 
 -- TELEPORT BUTTONS LOGIC
 TpCursedShipBtn.MouseButton1Click:Connect(function()
-    pcall(function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(923, 126, 32852))
-    end)
+    requestPortal(Vector3.new(923, 126, 32852))
 end)
 
 TpSwanRoomBtn.MouseButton1Click:Connect(function()
-    pcall(function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(2285, 15, 905))
-    end)
+    requestPortal(Vector3.new(2285, 15, 905))
 end)
 
 TpTempleBtn.MouseButton1Click:Connect(function()
-    pcall(function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(28286, 14897, 103))
-    end)
+    requestPortal(Vector3.new(28286, 14897, 103))
 end)
 
 TpMansionBtn.MouseButton1Click:Connect(function()
-    pcall(function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(-12462, 375, -7552))
-    end)
+    requestPortal(Vector3.new(-12462, 375, -7552))
 end)
 
 -- SAFE MODE LOGIC
@@ -419,13 +428,9 @@ RunService.Heartbeat:Connect(function()
                 if hum.Health <= (hum.MaxHealth * (safeModeHp / 100)) then
                     safeModeTriggered = true
                     if sea2 then
-                        pcall(function()
-                            ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(923, 126, 32852))
-                        end)
+                        requestPortal(Vector3.new(923, 126, 32852))
                     elseif sea3 then
-                        pcall(function()
-                            ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(28286, 14897, 103))
-                        end)
+                        requestPortal(Vector3.new(28286, 14897, 103))
                     end
                 end
             end
