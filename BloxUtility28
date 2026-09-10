@@ -1,4 +1,4 @@
---Yoo
+--Test
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -125,7 +125,7 @@ UIListLayout.Parent = MainFrame
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 UIListLayout.Padding = UDim.new(0, 2)
 
--- Robust Click & Drag Logic (Fixes close/open toggle bug)
+-- Robust Click & Drag Logic
 local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
 local movedDistance = 0
 
@@ -240,28 +240,37 @@ local TpTempleBtn = createButton("TP: Temple Time", MainFrame)
 local TpMansionBtn = createButton("TP: Mansion", MainFrame)
 
 -- ==========================
--- UNIVERSAL TELEPORT LOGIC
+-- ROBUST TELEPORT LOGIC
 -- ==========================
 local function ForceTeleport(targetPos)
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        local hrp = char.HumanoidRootPart
+    task.spawn(function()
+        local char = LocalPlayer.Character
+        if not char then return end
         
-        -- 1. Try remote to load chunks/events properly (spawns new thread so it never yields the script)
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum then return end
+
+        -- 1. Reset states that block teleportation
+        hum.Sit = false
+        
+        -- 2. Attempt server portal remote asynchronously
         task.spawn(function()
             pcall(function()
                 ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", targetPos)
             end)
         end)
         
-        -- 2. Force CFrame bypass. If you are in combat, the remote fails. This ensures you still escape.
-        task.delay(0.15, function()
-            if char and hrp and (hrp.Position - targetPos).Magnitude > 20 then
+        -- 3. Force position across multiple frames to overcome rubberbanding & combat blocks
+        for i = 1, 10 do
+            if char and hrp then
                 hrp.AssemblyLinearVelocity = Vector3.zero
+                hrp.AssemblyAngularVelocity = Vector3.zero
                 hrp.CFrame = CFrame.new(targetPos)
             end
-        end)
-    end
+            task.wait(0.05)
+        end
+    end)
 end
 
 -- FLY LOGIC
@@ -343,7 +352,7 @@ EnergyBtn.MouseButton1Click:Connect(function()
     SaveConfig()
 end)
 
--- INF SORU LOGIC (Optimized / Non-freezing)
+-- INF SORU LOGIC
 local function getInfinity_Soru(Var)
     task.spawn(function()
         local soruTable = nil
@@ -400,7 +409,7 @@ TpMansionBtn.MouseButton1Click:Connect(function()
     ForceTeleport(Vector3.new(-12462, 375, -7552))
 end)
 
--- SAFE MODE LOGIC
+-- SAFE MODE LOGIC (AUTOMATIC RECOVERY RESET)
 SafeModeBtn.MouseButton1Click:Connect(function()
     safeMode = not safeMode
     SafeModeBtn.Text = "Safe Mode: " .. (safeMode and "ON" or "OFF")
@@ -432,8 +441,10 @@ RunService.Heartbeat:Connect(function()
         local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         
         if hum and hrp and hum.Health > 0 then
-            if not safeModeTriggered then
-                if hum.Health <= (hum.MaxHealth * (safeModeHp / 100)) then
+            local thresholdHp = hum.MaxHealth * (safeModeHp / 100)
+            
+            if hum.Health <= thresholdHp then
+                if not safeModeTriggered then
                     safeModeTriggered = true
                     
                     if sea2 then
@@ -441,17 +452,12 @@ RunService.Heartbeat:Connect(function()
                     elseif sea3 then
                         ForceTeleport(Vector3.new(28286, 14897, 103))
                     else
-                        -- Fallback for Sea 1: Teleports you directly upward 10,000 studs into the sky to escape
                         ForceTeleport(hrp.Position + Vector3.new(0, 10000, 0))
                     end
-                    
-                    -- Reset safe mode if the player heals back up naturally so it can save them again later
-                    task.delay(4, function()
-                        if hum and hum.Health > (hum.MaxHealth * (safeModeHp / 100)) then
-                            safeModeTriggered = false
-                        end
-                    end)
                 end
+            elseif hum.Health > thresholdHp then
+                -- Automatically re-enables Safe Mode once you heal back up
+                safeModeTriggered = false
             end
         end
     else
