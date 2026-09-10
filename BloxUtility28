@@ -1,3 +1,4 @@
+--Yoo
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -25,23 +26,6 @@ local sea2 = (game.PlaceId == 4442272183 or game.PlaceId == 79091703265657)
 local sea3 = (game.PlaceId == 7449423635 or game.PlaceId == 100117331123089)
 
 local configFile = "TinyGuiSettings.json"
-
--- ==========================
--- ROBUST TELEPORT HELPER (Fixes 1/10 failure rate)
--- ==========================
-local function requestPortal(pos)
-    task.spawn(function()
-        pcall(function()
-            local remotes = ReplicatedStorage:WaitForChild("Remotes", 3)
-            if remotes then
-                local commF = remotes:WaitForChild("CommF_", 3)
-                if commF then
-                    commF:InvokeServer("requestEntrance", pos)
-                end
-            end
-        end)
-    end)
-end
 
 -- ==========================
 -- CONFIGURATION SYSTEM
@@ -255,6 +239,30 @@ local TpSwanRoomBtn = createButton("TP: Swan Room", MainFrame)
 local TpTempleBtn = createButton("TP: Temple Time", MainFrame)
 local TpMansionBtn = createButton("TP: Mansion", MainFrame)
 
+-- ==========================
+-- UNIVERSAL TELEPORT LOGIC
+-- ==========================
+local function ForceTeleport(targetPos)
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        local hrp = char.HumanoidRootPart
+        
+        -- 1. Try remote to load chunks/events properly (spawns new thread so it never yields the script)
+        task.spawn(function()
+            pcall(function()
+                ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", targetPos)
+            end)
+        end)
+        
+        -- 2. Force CFrame bypass. If you are in combat, the remote fails. This ensures you still escape.
+        task.delay(0.15, function()
+            if char and hrp and (hrp.Position - targetPos).Magnitude > 20 then
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                hrp.CFrame = CFrame.new(targetPos)
+            end
+        end)
+    end
+end
 
 -- FLY LOGIC
 local function toggleFly()
@@ -377,19 +385,19 @@ end)
 
 -- TELEPORT BUTTONS LOGIC
 TpCursedShipBtn.MouseButton1Click:Connect(function()
-    requestPortal(Vector3.new(923, 126, 32852))
+    ForceTeleport(Vector3.new(923, 126, 32852))
 end)
 
 TpSwanRoomBtn.MouseButton1Click:Connect(function()
-    requestPortal(Vector3.new(2285, 15, 905))
+    ForceTeleport(Vector3.new(2285, 15, 905))
 end)
 
 TpTempleBtn.MouseButton1Click:Connect(function()
-    requestPortal(Vector3.new(28286, 14897, 103))
+    ForceTeleport(Vector3.new(28286, 14897, 103))
 end)
 
 TpMansionBtn.MouseButton1Click:Connect(function()
-    requestPortal(Vector3.new(-12462, 375, -7552))
+    ForceTeleport(Vector3.new(-12462, 375, -7552))
 end)
 
 -- SAFE MODE LOGIC
@@ -427,11 +435,22 @@ RunService.Heartbeat:Connect(function()
             if not safeModeTriggered then
                 if hum.Health <= (hum.MaxHealth * (safeModeHp / 100)) then
                     safeModeTriggered = true
+                    
                     if sea2 then
-                        requestPortal(Vector3.new(923, 126, 32852))
+                        ForceTeleport(Vector3.new(923, 126, 32852))
                     elseif sea3 then
-                        requestPortal(Vector3.new(28286, 14897, 103))
+                        ForceTeleport(Vector3.new(28286, 14897, 103))
+                    else
+                        -- Fallback for Sea 1: Teleports you directly upward 10,000 studs into the sky to escape
+                        ForceTeleport(hrp.Position + Vector3.new(0, 10000, 0))
                     end
+                    
+                    -- Reset safe mode if the player heals back up naturally so it can save them again later
+                    task.delay(4, function()
+                        if hum and hum.Health > (hum.MaxHealth * (safeModeHp / 100)) then
+                            safeModeTriggered = false
+                        end
+                    end)
                 end
             end
         end
