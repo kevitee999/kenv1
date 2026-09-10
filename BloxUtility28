@@ -415,20 +415,7 @@ RunService.Heartbeat:Connect(function()
         local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         
         if hum and hrp and hum.Health > 0 then
-            if safeModeTriggered then
-                if hum.Health >= hum.MaxHealth then
-                    safeModeTriggered = false
-                    if sea2 then
-                        pcall(function()
-                            ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(2285, 15, 905))
-                        end)
-                    elseif sea3 then
-                        pcall(function()
-                            ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(-12462, 375, -7552))
-                        end)
-                    end
-                end
-            else
+            if not safeModeTriggered then
                 if hum.Health <= (hum.MaxHealth * (safeModeHp / 100)) then
                     safeModeTriggered = true
                     if sea2 then
