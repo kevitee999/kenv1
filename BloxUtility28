@@ -68,7 +68,7 @@ end
 LoadConfig()
 
 -- ==========================
--- REMOTES HOOK (Energy Save)
+-- REMOTES HOOK (Energy Save Only)
 -- ==========================
 pcall(function()
 	local mt = getrawmetatable(game)
@@ -114,7 +114,7 @@ PingBtn.Text = "Ping: 0"
 PingBtn.Parent = ScreenGui
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 110, 0, 280)
+MainFrame.Size = UDim2.new(0, 110, 0, 262)
 MainFrame.Position = UDim2.new(0, 20, 0, 52)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
@@ -265,9 +265,6 @@ DashDropdownBtn.MouseButton1Click:Connect(function()
 	OptionsFrame.Visible = not OptionsFrame.Visible
 end)
 
-local NoclipBtn = createButton("Noclip: " .. (noclip and "ON" or "OFF"), MainFrame)
-if noclip then NoclipBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
-
 -- ==========================
 -- FEATURES
 -- ==========================
@@ -275,6 +272,10 @@ local function toggleFly()
 	flying = not flying
 	FlyBtn.Text = "Fly [P]: " .. (flying and "ON" or "OFF")
 	FlyBtn.TextColor3 = flying and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+
+	-- Sync Noclip with Fly state
+	noclip = flying
+	SaveConfig()
 
 	local char = LocalPlayer.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -414,13 +415,6 @@ DashBtn.MouseButton1Click:Connect(function()
 	SaveConfig()
 end)
 
-NoclipBtn.MouseButton1Click:Connect(function()
-	noclip = not noclip
-	NoclipBtn.Text = "Noclip: " .. (noclip and "ON" or "OFF")
-	NoclipBtn.TextColor3 = noclip and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
-	SaveConfig()
-end)
-
 LocalPlayer.CharacterAdded:Connect(function()
 	safeModeTriggered = false
 	if flying then
@@ -428,6 +422,8 @@ LocalPlayer.CharacterAdded:Connect(function()
 		FlyBtn.Text = "Fly [P]: OFF"
 		FlyBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 		workspace.Gravity = 196.2
+		noclip = false
+		SaveConfig()
 	end
 end)
 
@@ -483,7 +479,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================
--- RENDER: Jump, Fly, & Dash Multiplier
+-- RENDER: Jump, Fly, & Dash Attributes
 -- ==========================
 RunService.RenderStepped:Connect(function()
 	local char = LocalPlayer.Character
@@ -493,9 +489,13 @@ RunService.RenderStepped:Connect(function()
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	if not hum or not hrp then return end
 
-	-- Continuous dash attribute enforcement
+	-- Continuous ground & air dash attribute enforcement
 	if dashToggle then
-		char:SetAttribute("DashLength", (dashMultiplier - 1) * 90)
+		local val = (dashMultiplier - 1) * 90
+		char:SetAttribute("DashLength", val)
+		char:SetAttribute("AirDashLength", val)
+		char:SetAttribute("DodgeLength", val)
+		char:SetAttribute("AirDodgeLength", val)
 	end
 
 	if jump500Toggle or safeModeTriggered then
@@ -548,4 +548,4 @@ RunService.Stepped:Connect(function()
 	end
 end)
 
-print("[Tiny Gui] Final loaded with Continuous Dash Multiplier Fix")
+print("[Tiny Gui] Final loaded with Ground & Air Dash Attributes Fixed")
