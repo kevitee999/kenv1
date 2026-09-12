@@ -565,5 +565,28 @@ RunService.Stepped:Connect(function()
 		end
 	end
 end)
+--New
+--Ghost v spam
+local args = {
+	[1] = "V",
+	n = 1,
+}
+
+local toggle = true -- Set to false to stop the loop
+
+while toggle do
+	task.wait(0.8)
+
+	local character = workspace:FindFirstChild("Characters") and workspace.Characters:FindFirstChild("CHILLxBABY_100")
+	if character and character:FindFirstChild("Humanoid") then
+		local remote = character.Humanoid:FindFirstChild("")
+
+		if remote then
+			task.spawn(function()
+				remote:InvokeServer(unpack(args, 1, args.n or #args))
+			end)
+		end
+	end
+end
 
 print("[Tiny Gui] Final | Safe Mode: fly up + noclip ON")
