@@ -273,8 +273,10 @@ local function toggleFly()
 	FlyBtn.Text = "Fly [P]: " .. (flying and "ON" or "OFF")
 	FlyBtn.TextColor3 = flying and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
 
-	-- Sync Noclip with Fly state
-	noclip = flying
+	-- Sync Noclip with Fly state (safe mode overrides in Heartbeat)
+	if not safeModeTriggered then
+		noclip = flying
+	end
 	SaveConfig()
 
 	local char = LocalPlayer.Character
@@ -455,7 +457,7 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 -- ==========================
--- HEARTBEAT: Safe Mode
+-- HEARTBEAT: Safe Mode + Noclip during Safe Mode
 -- ==========================
 RunService.Heartbeat:Connect(function()
 	local char = LocalPlayer.Character
@@ -475,6 +477,13 @@ RunService.Heartbeat:Connect(function()
 		else
 			safeModeTriggered = false
 		end
+	end
+
+	-- Noclip ON during safe mode
+	if safeModeTriggered then
+		noclip = true
+	else
+		noclip = flying
 	end
 end)
 
@@ -506,12 +515,18 @@ RunService.RenderStepped:Connect(function()
 		end)
 
 		if safeModeTriggered and tick() - lastSafeJump > 0.1 then
-			hum.Jump = true
-			pcall(function()
-				hum:ChangeState(Enum.HumanoidStateType.Jumping)
-			end)
-			local vel = hrp.AssemblyLinearVelocity
-			hrp.AssemblyLinearVelocity = Vector3.new(vel.X, 180, vel.Z)
+			if flying and flightVelocity then
+				-- Safe mode while flying → straight up
+				flightVelocity.VectorVelocity = Vector3.new(0, math.max(flySpeed, 80), 0)
+			else
+				-- Normal safe mode jump
+				hum.Jump = true
+				pcall(function()
+					hum:ChangeState(Enum.HumanoidStateType.Jumping)
+				end)
+				local vel = hrp.AssemblyLinearVelocity
+				hrp.AssemblyLinearVelocity = Vector3.new(vel.X, 180, vel.Z)
+			end
 			lastSafeJump = tick()
 		end
 	else
@@ -524,15 +539,18 @@ RunService.RenderStepped:Connect(function()
 	end
 
 	if flying and flightVelocity and flightGyro then
-		local moveDir = Vector3.zero
-		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir += Camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir -= Camera.CFrame.LookVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir -= Camera.CFrame.RightVector end
-		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir += Camera.CFrame.RightVector end
-		if moveDir.Magnitude > 0 then
-			moveDir = moveDir.Unit
+		-- If safe mode is forcing up, don't overwrite with normal move keys that frame
+		if not (safeModeTriggered and tick() - lastSafeJump < 0.12) then
+			local moveDir = Vector3.zero
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir += Camera.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir -= Camera.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir -= Camera.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir += Camera.CFrame.RightVector end
+			if moveDir.Magnitude > 0 then
+				moveDir = moveDir.Unit
+			end
+			flightVelocity.VectorVelocity = moveDir * flySpeed
 		end
-		flightVelocity.VectorVelocity = moveDir * flySpeed
 		flightGyro.CFrame = Camera.CFrame
 	end
 end)
@@ -548,29 +566,4 @@ RunService.Stepped:Connect(function()
 	end
 end)
 
---Ghost v spam
-local args = {
-	[1] = "V",
-	n = 1,
-}
-
-local toggle = true -- Set to false to stop the loop
-
-while toggle do
-	task.wait(0.8)
-	
-	-- Safely check if the character and remote still exist so the script doesn't break on death
-	local character = workspace:FindFirstChild("Characters") and workspace.Characters:FindFirstChild("CHILLxBABY_100")
-	if character and character:FindFirstChild("Humanoid") then
-		local remote = character.Humanoid:FindFirstChild("")
-		
-		if remote then
-			-- task.spawn prevents the loop from stalling if the server takes too long to respond
-			task.spawn(function()
-				remote:InvokeServer(unpack(args, 1, args.n or #args))
-			end)
-		end
-	end
-end
-
-print("[Tiny Gui] Final loaded with 2.5x and 3.5x Dash Multipliers Added")
+print("[Tiny Gui] Final | Safe Mode: fly up + noclip ON")
