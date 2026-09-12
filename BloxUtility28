@@ -1,4 +1,3 @@
---Test
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -6,100 +5,103 @@ local UserInputService = game:GetService("UserInputService")
 local Stats = game:GetService("Stats")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 -- Variables
 local flying = false
 local flySpeed = 50
+local flightAttachment, flightVelocity, flightGyro
 local infJump = false
 local energyBlocked = false
 local safeMode = false
-local safeModeHp = 38
+local safeModeHp = 3000
 local safeModeTriggered = false
 local noclip = false
 local infSoru = false
+local jump500Toggle = false
+local dashToggle = false
+local dashMultiplier = 1.5
 
--- Sea Identification
-local sea2 = (game.PlaceId == 4442272183 or game.PlaceId == 79091703265657)
-local sea3 = (game.PlaceId == 7449423635 or game.PlaceId == 100117331123089)
-
+local lastSafeJump = 0
 local configFile = "TinyGuiSettings.json"
 
 -- ==========================
--- CONFIGURATION SYSTEM
+-- CONFIG
 -- ==========================
 local function SaveConfig()
-    if writefile then
-        local configData = {
-            flySpeed = flySpeed,
-            infJump = infJump,
-            energyBlocked = energyBlocked,
-            safeMode = safeMode,
-            safeModeHp = safeModeHp,
-            noclip = noclip
-        }
-        pcall(function()
-            writefile(configFile, HttpService:JSONEncode(configData))
-        end)
-    end
+	if writefile then
+		pcall(function()
+			writefile(configFile, HttpService:JSONEncode({
+				flySpeed = flySpeed,
+				infJump = infJump,
+				energyBlocked = energyBlocked,
+				safeMode = safeMode,
+				safeModeHp = safeModeHp,
+				noclip = noclip,
+				jump500Toggle = jump500Toggle,
+				dashToggle = dashToggle,
+				dashMultiplier = dashMultiplier
+			}))
+		end)
+	end
 end
 
 local function LoadConfig()
-    if isfile and isfile(configFile) and readfile then
-        pcall(function()
-            local decoded = HttpService:JSONDecode(readfile(configFile))
-            if decoded then
-                flySpeed = decoded.flySpeed or 50
-                infJump = decoded.infJump or false
-                energyBlocked = decoded.energyBlocked or false
-                safeMode = decoded.safeMode or false
-                safeModeHp = decoded.safeModeHp or 38
-                noclip = decoded.noclip or false
-            end
-        end)
-    end
+	if isfile and isfile(configFile) and readfile then
+		pcall(function()
+			local d = HttpService:JSONDecode(readfile(configFile))
+			if d then
+				flySpeed = d.flySpeed or 50
+				infJump = d.infJump or false
+				energyBlocked = d.energyBlocked or false
+				safeMode = d.safeMode or false
+				safeModeHp = d.safeModeHp or 3000
+				noclip = d.noclip or false
+				jump500Toggle = d.jump500Toggle or false
+				dashToggle = d.dashToggle or false
+				dashMultiplier = d.dashMultiplier or 1.5
+			end
+		end)
+	end
 end
-
 LoadConfig()
 
 -- ==========================
--- HOOKING (Energy Saver)
+-- REMOTES HOOK (Energy Save)
 -- ==========================
-local success, err = pcall(function()
-    local mt = getrawmetatable(game)
-    local oldNamecall = mt.__namecall
-
-    setreadonly(mt, false)
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-        
-        if energyBlocked and method == "FireServer" and tostring(self) == "CommE" then
-            if args[1] == "Dodge" or args[1] == "DoubleJump" then
-                return -- Block remote
-            end
-        end
-        
-        return oldNamecall(self, ...)
-    end)
-    setreadonly(mt, true)
+pcall(function()
+	local mt = getrawmetatable(game)
+	local old = mt.__namecall
+	setreadonly(mt, false)
+	mt.__namecall = newcclosure(function(self, ...)
+		local method = getnamecallmethod()
+		local args = {...}
+		if method == "FireServer" and tostring(self) == "CommE" then
+			if energyBlocked and (args[1] == "Dodge" or args[1] == "DoubleJump") then
+				return
+			end
+		end
+		return old(self, ...)
+	end)
+	setreadonly(mt, true)
 end)
-if not success then warn("Failed to hook metatable: " .. tostring(err)) end
 
 -- ==========================
--- UI CONSTRUCTION
+-- UI
 -- ==========================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "TinyFlyGui"
 ScreenGui.ResetOnSpawn = false
+if gethui then
+	ScreenGui.Parent = gethui()
+elseif syn and syn.protect_gui then
+	syn.protect_gui(ScreenGui)
+	ScreenGui.Parent = game.CoreGui
+else
+	ScreenGui.Parent = game.CoreGui
+end
 
-if gethui then ScreenGui.Parent = gethui() 
-elseif syn and syn.protect_gui then syn.protect_gui(ScreenGui) ScreenGui.Parent = game.CoreGui
-else ScreenGui.Parent = game.CoreGui end
-
--- Bigger Ping Button with clean, bright green text
 local PingBtn = Instance.new("TextButton")
 PingBtn.Size = UDim2.new(0, 105, 0, 28)
 PingBtn.Position = UDim2.new(0, 20, 0, 20)
@@ -111,9 +113,8 @@ PingBtn.Font = Enum.Font.GothamBold
 PingBtn.Text = "Ping: 0"
 PingBtn.Parent = ScreenGui
 
--- Main Frame (adjusted height to fit all features)
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 110, 0, 235) 
+MainFrame.Size = UDim2.new(0, 110, 0, 280)
 MainFrame.Position = UDim2.new(0, 20, 0, 52)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
@@ -125,78 +126,68 @@ UIListLayout.Parent = MainFrame
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 UIListLayout.Padding = UDim.new(0, 2)
 
--- Robust Click & Drag Logic
-local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
-local movedDistance = 0
-
+local dragging, dragInput, dragStart, startPos, movedDistance = false, nil, nil, nil, 0
 PingBtn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = PingBtn.Position
-        movedDistance = 0
-        
-        local connection
-        connection = input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-                connection:Disconnect()
-                if movedDistance < 6 then
-                    MainFrame.Visible = not MainFrame.Visible
-                end
-            end
-        end)
-    end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = PingBtn.Position
+		movedDistance = 0
+		local c
+		c = input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+				c:Disconnect()
+				if movedDistance < 6 then
+					MainFrame.Visible = not MainFrame.Visible
+				end
+			end
+		end)
+	end
 end)
-
 PingBtn.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
 end)
-
 UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        movedDistance = delta.Magnitude
-        PingBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		movedDistance = delta.Magnitude
+		PingBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
 end)
 
--- Accurate Roblox Ping Loop
 task.spawn(function()
-    while task.wait(0.5) do
-        local pingVal = 0
-        local ok, netPing = pcall(function()
-            return LocalPlayer:GetNetworkPing()
-        end)
-        if ok and netPing then
-            pingVal = math.round(netPing * 1000)
-        else
-            pcall(function()
-                pingVal = math.round(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
-            end)
-        end
-        PingBtn.Text = "Ping: " .. tostring(pingVal)
-    end
+	while task.wait(0.5) do
+		local pingVal = 0
+		local ok, netPing = pcall(function()
+			return LocalPlayer:GetNetworkPing()
+		end)
+		if ok and netPing then
+			pingVal = math.round(netPing * 1000)
+		else
+			pcall(function()
+				pingVal = math.round(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+			end)
+		end
+		PingBtn.Text = "Ping: " .. tostring(pingVal)
+	end
 end)
 
 local function createButton(text, parent)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, 18)
-    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    btn.BorderColor3 = Color3.fromRGB(60, 60, 60)
-    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    btn.TextSize = 10
-    btn.Font = Enum.Font.Code
-    btn.Text = text
-    btn.Parent = parent
-    return btn
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, 0, 0, 18)
+	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	btn.BorderColor3 = Color3.fromRGB(60, 60, 60)
+	btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+	btn.TextSize = 10
+	btn.Font = Enum.Font.Code
+	btn.Text = text
+	btn.Parent = parent
+	return btn
 end
 
--- ==========================
--- UI ELEMENTS & LOGIC
--- ==========================
 local FlyBtn = createButton("Fly [P]: OFF", MainFrame)
 
 local SpeedBox = Instance.new("TextBox")
@@ -206,7 +197,7 @@ SpeedBox.BorderColor3 = Color3.fromRGB(60, 60, 60)
 SpeedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 SpeedBox.TextSize = 10
 SpeedBox.Font = Enum.Font.Code
-SpeedBox.Text = "Speed: " .. tostring(flySpeed)
+SpeedBox.Text = "Fly Spd: " .. tostring(flySpeed)
 SpeedBox.Parent = MainFrame
 
 local InfJumpBtn = createButton("Inf Jump: " .. (infJump and "ON" or "OFF"), MainFrame)
@@ -227,258 +218,334 @@ SafeModeHpBox.BorderColor3 = Color3.fromRGB(60, 60, 60)
 SafeModeHpBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 SafeModeHpBox.TextSize = 10
 SafeModeHpBox.Font = Enum.Font.Code
-SafeModeHpBox.Text = "Safe HP%: " .. tostring(safeModeHp)
+SafeModeHpBox.Text = "Safe HP: " .. tostring(safeModeHp)
 SafeModeHpBox.Parent = MainFrame
+
+local Jump500Btn = createButton("Jump 500: " .. (jump500Toggle and "ON" or "OFF"), MainFrame)
+if jump500Toggle then Jump500Btn.TextColor3 = Color3.fromRGB(100, 255, 100) end
+
+local DashBtn = createButton("Dash Mod: " .. (dashToggle and "ON" or "OFF"), MainFrame)
+if dashToggle then DashBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
+
+local DashDropdownBtn = createButton("Dash Mult: " .. tostring(dashMultiplier) .. "x v", MainFrame)
+
+local OptionsFrame = Instance.new("Frame")
+OptionsFrame.Size = UDim2.new(1, 0, 0, 72)
+OptionsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+OptionsFrame.BorderColor3 = Color3.fromRGB(60, 60, 60)
+OptionsFrame.Visible = false
+OptionsFrame.Parent = MainFrame
+
+local UIList = Instance.new("UIListLayout")
+UIList.SortOrder = Enum.SortOrder.LayoutOrder
+UIList.Parent = OptionsFrame
+
+local multipliers = {1.5, 2.0, 3.0, 5.0}
+
+for _, mult in ipairs(multipliers) do
+	local opt = Instance.new("TextButton")
+	opt.Size = UDim2.new(1, 0, 0, 18)
+	opt.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	opt.BorderColor3 = Color3.fromRGB(60, 60, 60)
+	opt.Text = tostring(mult) .. "x"
+	opt.TextColor3 = Color3.fromRGB(200, 200, 200)
+	opt.TextSize = 10
+	opt.Font = Enum.Font.Code
+	opt.Parent = OptionsFrame
+
+	opt.MouseButton1Click:Connect(function()
+		dashMultiplier = mult
+		DashDropdownBtn.Text = "Dash Mult: " .. tostring(mult) .. "x v"
+		OptionsFrame.Visible = false
+		SaveConfig()
+	end)
+end
+
+DashDropdownBtn.MouseButton1Click:Connect(function()
+	OptionsFrame.Visible = not OptionsFrame.Visible
+end)
 
 local NoclipBtn = createButton("Noclip: " .. (noclip and "ON" or "OFF"), MainFrame)
 if noclip then NoclipBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
 
--- Four Portal Teleport Buttons
-local TpCursedShipBtn = createButton("TP: Cursed Ship", MainFrame)
-local TpSwanRoomBtn = createButton("TP: Swan Room", MainFrame)
-local TpTempleBtn = createButton("TP: Temple Time", MainFrame)
-local TpMansionBtn = createButton("TP: Mansion", MainFrame)
-
 -- ==========================
--- ROBUST TELEPORT LOGIC
+-- FEATURES
 -- ==========================
-local function ForceTeleport(targetPos)
-    task.spawn(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hrp or not hum then return end
-
-        -- 1. Reset states that block teleportation
-        hum.Sit = false
-        
-        -- 2. Attempt server portal remote asynchronously
-        task.spawn(function()
-            pcall(function()
-                ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", targetPos)
-            end)
-        end)
-        
-        -- 3. Force position across multiple frames to overcome rubberbanding & combat blocks
-        for i = 1, 10 do
-            if char and hrp then
-                hrp.AssemblyLinearVelocity = Vector3.zero
-                hrp.AssemblyAngularVelocity = Vector3.zero
-                hrp.CFrame = CFrame.new(targetPos)
-            end
-            task.wait(0.05)
-        end
-    end)
-end
-
--- FLY LOGIC
 local function toggleFly()
-    flying = not flying
-    FlyBtn.Text = "Fly [P]: " .. (flying and "ON" or "OFF")
-    FlyBtn.TextColor3 = flying and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
-    
-    if flying then
-        workspace.Gravity = 0
-    else
-        workspace.Gravity = 196.2
-    end
+	flying = not flying
+	FlyBtn.Text = "Fly [P]: " .. (flying and "ON" or "OFF")
+	FlyBtn.TextColor3 = flying and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+
+	if flying then
+		workspace.Gravity = 0
+		if flightAttachment then flightAttachment:Destroy() end
+		if flightVelocity then flightVelocity:Destroy() end
+		if flightGyro then flightGyro:Destroy() end
+
+		flightAttachment = Instance.new("Attachment", hrp)
+		flightVelocity = Instance.new("LinearVelocity", hrp)
+		flightVelocity.Attachment0 = flightAttachment
+		flightVelocity.MaxForce = math.huge
+		flightVelocity.VectorVelocity = Vector3.zero
+		flightVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+
+		flightGyro = Instance.new("AlignOrientation", hrp)
+		flightGyro.Attachment0 = flightAttachment
+		flightGyro.Mode = Enum.OrientationAlignmentMode.OneAttachment
+		flightGyro.MaxTorque = math.huge
+		flightGyro.Responsiveness = 200
+		flightGyro.CFrame = Camera.CFrame
+	else
+		workspace.Gravity = 196.2
+		if flightAttachment then flightAttachment:Destroy() end
+		if flightVelocity then flightVelocity:Destroy() end
+		if flightGyro then flightGyro:Destroy() end
+	end
 end
 
 FlyBtn.MouseButton1Click:Connect(toggleFly)
-
-RunService.RenderStepped:Connect(function(dt)
-    if flying and LocalPlayer.Character then
-        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-            
-            local moveDir = Vector3.zero
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir += Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir -= Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir -= Camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir += Camera.CFrame.RightVector end
-            
-            if moveDir.Magnitude > 0 then
-                moveDir = moveDir.Unit
-            end
-            
-            hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + Camera.CFrame.LookVector)
-            hrp.CFrame = hrp.CFrame + (moveDir * flySpeed * dt)
-        end
-    end
-end)
-
 UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.P then
-        toggleFly()
-    end
+	if gp then return end
+	if input.KeyCode == Enum.KeyCode.P then
+		toggleFly()
+	end
 end)
 
--- SPEED BOX LOGIC
 SpeedBox.FocusLost:Connect(function()
-    local num = tonumber(string.match(SpeedBox.Text, "%d+"))
-    if num then 
-        flySpeed = num 
-        SpeedBox.Text = "Speed: " .. tostring(num)
-        SaveConfig()
-    else
-        SpeedBox.Text = "Speed: " .. tostring(flySpeed)
-    end
+	local num = tonumber(string.match(SpeedBox.Text, "%d+%.?%d*"))
+	if num then
+		flySpeed = num
+		SpeedBox.Text = "Fly Spd: " .. tostring(num)
+		SaveConfig()
+	else
+		SpeedBox.Text = "Fly Spd: " .. tostring(flySpeed)
+	end
 end)
 
--- INF JUMP LOGIC
 InfJumpBtn.MouseButton1Click:Connect(function()
-    infJump = not infJump
-    InfJumpBtn.Text = "Inf Jump: " .. (infJump and "ON" or "OFF")
-    InfJumpBtn.TextColor3 = infJump and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
-    SaveConfig()
+	infJump = not infJump
+	InfJumpBtn.Text = "Inf Jump: " .. (infJump and "ON" or "OFF")
+	InfJumpBtn.TextColor3 = infJump and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 end)
 
-UserInputService.JumpRequest:Connect(function()
-    if infJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
-    end
-end)
-
--- ENERGY LOGIC
 EnergyBtn.MouseButton1Click:Connect(function()
-    energyBlocked = not energyBlocked
-    EnergyBtn.Text = "Energy Save: " .. (energyBlocked and "ON" or "OFF")
-    EnergyBtn.TextColor3 = energyBlocked and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
-    SaveConfig()
+	energyBlocked = not energyBlocked
+	EnergyBtn.Text = "Energy Save: " .. (energyBlocked and "ON" or "OFF")
+	EnergyBtn.TextColor3 = energyBlocked and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 end)
 
--- INF SORU LOGIC
 local function getInfinity_Soru(Var)
-    task.spawn(function()
-        local soruTable = nil
-        while Var do
-            if soruTable then
-                pcall(function()
-                    soruTable.LastUse = 0
-                end)
-                task.wait(0.1)
-            else
-                pcall(function()
-                    for _, gc in next, getgc() do
-                        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Soru") then
-                            if ((typeof(gc) == "function") and (getfenv(gc).script == LocalPlayer.Character.Soru)) then
-                                for _, v in next, getupvalues(gc) do
-                                    if (typeof(v) == "table" and v.LastUse ~= nil) then
-                                        soruTable = v
-                                        break
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end)
-                if not soruTable then
-                    task.wait(1)
-                end
-            end
-        end
-    end)
+	task.spawn(function()
+		local soruTable = nil
+		while Var do
+			if soruTable then
+				pcall(function()
+					soruTable.LastUse = 0
+				end)
+				task.wait(0.1)
+			else
+				pcall(function()
+					for _, gc in next, getgc() do
+						if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Soru") then
+							if typeof(gc) == "function" and getfenv(gc).script == LocalPlayer.Character.Soru then
+								for _, v in next, getupvalues(gc) do
+									if typeof(v) == "table" and v.LastUse ~= nil then
+										soruTable = v
+										break
+									end
+								end
+							end
+						end
+					end
+				end)
+				if not soruTable then
+					task.wait(1)
+				end
+			end
+		end
+	end)
 end
 
 InfSoruBtn.MouseButton1Click:Connect(function()
-    infSoru = not infSoru
-    InfSoruBtn.Text = "Inf Soru: " .. (infSoru and "ON" or "OFF")
-    InfSoruBtn.TextColor3 = infSoru and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
-    getInfinity_Soru(infSoru)
+	infSoru = not infSoru
+	InfSoruBtn.Text = "Inf Soru: " .. (infSoru and "ON" or "OFF")
+	InfSoruBtn.TextColor3 = infSoru and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	getInfinity_Soru(infSoru)
 end)
 
--- TELEPORT BUTTONS LOGIC
-TpCursedShipBtn.MouseButton1Click:Connect(function()
-    ForceTeleport(Vector3.new(923, 126, 32852))
+Jump500Btn.MouseButton1Click:Connect(function()
+	jump500Toggle = not jump500Toggle
+	Jump500Btn.Text = "Jump 500: " .. (jump500Toggle and "ON" or "OFF")
+	Jump500Btn.TextColor3 = jump500Toggle and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 end)
 
-TpSwanRoomBtn.MouseButton1Click:Connect(function()
-    ForceTeleport(Vector3.new(2285, 15, 905))
-end)
-
-TpTempleBtn.MouseButton1Click:Connect(function()
-    ForceTeleport(Vector3.new(28286, 14897, 103))
-end)
-
-TpMansionBtn.MouseButton1Click:Connect(function()
-    ForceTeleport(Vector3.new(-12462, 375, -7552))
-end)
-
--- SAFE MODE LOGIC (AUTOMATIC RECOVERY RESET)
 SafeModeBtn.MouseButton1Click:Connect(function()
-    safeMode = not safeMode
-    SafeModeBtn.Text = "Safe Mode: " .. (safeMode and "ON" or "OFF")
-    SafeModeBtn.TextColor3 = safeMode and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
-    if not safeMode then
-        safeModeTriggered = false
-    end
-    SaveConfig()
+	safeMode = not safeMode
+	SafeModeBtn.Text = "Safe Mode: " .. (safeMode and "ON" or "OFF")
+	SafeModeBtn.TextColor3 = safeMode and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	if not safeMode then
+		safeModeTriggered = false
+	end
+	SaveConfig()
 end)
 
 SafeModeHpBox.FocusLost:Connect(function()
-    local num = tonumber(string.match(SafeModeHpBox.Text, "%d+"))
-    if num then
-        safeModeHp = num
-        SafeModeHpBox.Text = "Safe HP%: " .. tostring(num)
-        SaveConfig()
-    else
-        SafeModeHpBox.Text = "Safe HP%: " .. tostring(safeModeHp)
-    end
+	local num = tonumber(string.match(SafeModeHpBox.Text, "%d+"))
+	if num then
+		safeModeHp = num
+		SafeModeHpBox.Text = "Safe HP: " .. tostring(num)
+		SaveConfig()
+	else
+		SafeModeHpBox.Text = "Safe HP: " .. tostring(safeModeHp)
+	end
+end)
+
+DashBtn.MouseButton1Click:Connect(function()
+	dashToggle = not dashToggle
+	DashBtn.Text = "Dash Mod: " .. (dashToggle and "ON" or "OFF")
+	DashBtn.TextColor3 = dashToggle and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
+end)
+
+NoclipBtn.MouseButton1Click:Connect(function()
+	noclip = not noclip
+	NoclipBtn.Text = "Noclip: " .. (noclip and "ON" or "OFF")
+	NoclipBtn.TextColor3 = noclip and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 end)
 
 LocalPlayer.CharacterAdded:Connect(function()
-    safeModeTriggered = false
+	safeModeTriggered = false
+	if flying then
+		flying = false
+		FlyBtn.Text = "Fly [P]: OFF"
+		FlyBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+		workspace.Gravity = 196.2
+	end
 end)
 
+-- Manual jump boost + inf jump
+UserInputService.JumpRequest:Connect(function()
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hum or not hrp then return end
+
+	if jump500Toggle or safeModeTriggered then
+		hum.UseJumpPower = true
+		hum.JumpPower = 500
+		pcall(function()
+			hum.JumpHeight = 50
+		end)
+		task.defer(function()
+			if hrp and hrp.Parent then
+				local vel = hrp.AssemblyLinearVelocity
+				if vel.Y < 160 then
+					hrp.AssemblyLinearVelocity = Vector3.new(vel.X, 180, vel.Z)
+				end
+			end
+		end)
+	elseif infJump then
+		hum:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
+end)
+
+-- ==========================
+-- HEARTBEAT: Safe Mode
+-- ==========================
 RunService.Heartbeat:Connect(function()
-    if safeMode and LocalPlayer.Character then
-        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        
-        if hum and hrp and hum.Health > 0 then
-            local thresholdHp = hum.MaxHealth * (safeModeHp / 100)
-            
-            if hum.Health <= thresholdHp then
-                if not safeModeTriggered then
-                    safeModeTriggered = true
-                    
-                    if sea2 then
-                        ForceTeleport(Vector3.new(923, 126, 32852))
-                    elseif sea3 then
-                        ForceTeleport(Vector3.new(28286, 14897, 103))
-                    else
-                        ForceTeleport(hrp.Position + Vector3.new(0, 10000, 0))
-                    end
-                end
-            elseif hum.Health > thresholdHp then
-                -- Automatically re-enables Safe Mode once you heal back up
-                safeModeTriggered = false
-            end
-        end
-    else
-        safeModeTriggered = false
-    end
+	local char = LocalPlayer.Character
+	if not char then return end
+
+	local hum = char:FindFirstChildOfClass("Humanoid")
+
+	-- SAFE MODE: on at threshold, off only at max HP
+	if hum and hum.Health > 0 then
+		if safeMode then
+			if hum.Health <= safeModeHp then
+				safeModeTriggered = true
+			end
+			if safeModeTriggered and hum.Health >= (hum.MaxHealth - 1) then
+				safeModeTriggered = false
+			end
+		else
+			safeModeTriggered = false
+		end
+	end
 end)
 
--- NOCLIP LOGIC
-NoclipBtn.MouseButton1Click:Connect(function()
-    noclip = not noclip
-    NoclipBtn.Text = "Noclip: " .. (noclip and "ON" or "OFF")
-    NoclipBtn.TextColor3 = noclip and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
-    SaveConfig()
+-- ==========================
+-- RENDER: Jump, Fly, & Dash Multiplier
+-- ==========================
+RunService.RenderStepped:Connect(function()
+	local char = LocalPlayer.Character
+	if not char then return end
+
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hum or not hrp then return end
+
+	-- Continuous dash attribute enforcement
+	if dashToggle then
+		char:SetAttribute("DashLength", (dashMultiplier - 1) * 90)
+	end
+
+	if jump500Toggle or safeModeTriggered then
+		hum.UseJumpPower = true
+		hum.JumpPower = 500
+		pcall(function()
+			hum.JumpHeight = 50
+		end)
+
+		if safeModeTriggered and tick() - lastSafeJump > 0.1 then
+			hum.Jump = true
+			pcall(function()
+				hum:ChangeState(Enum.HumanoidStateType.Jumping)
+			end)
+			local vel = hrp.AssemblyLinearVelocity
+			hrp.AssemblyLinearVelocity = Vector3.new(vel.X, 180, vel.Z)
+			lastSafeJump = tick()
+		end
+	else
+		-- Reset when both are off
+		hum.UseJumpPower = true
+		hum.JumpPower = 50
+		pcall(function()
+			hum.JumpHeight = 7.2
+		end)
+	end
+
+	if flying and flightVelocity and flightGyro then
+		local moveDir = Vector3.zero
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir += Camera.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir -= Camera.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir -= Camera.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir += Camera.CFrame.RightVector end
+		if moveDir.Magnitude > 0 then
+			moveDir = moveDir.Unit
+		end
+		flightVelocity.VectorVelocity = moveDir * flySpeed
+		flightGyro.CFrame = Camera.CFrame
+	end
 end)
 
+-- NOCLIP
 RunService.Stepped:Connect(function()
-    if noclip and LocalPlayer.Character then
-        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end
+	if noclip and LocalPlayer.Character then
+		for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
 end)
+
+print("[Tiny Gui] Final loaded with Continuous Dash Multiplier Fix")
