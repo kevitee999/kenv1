@@ -548,4 +548,29 @@ RunService.Stepped:Connect(function()
 	end
 end)
 
+--Ghost v spam
+local args = {
+	[1] = "V",
+	n = 1,
+}
+
+local toggle = true -- Set to false to stop the loop
+
+while toggle do
+	task.wait(0.8)
+	
+	-- Safely check if the character and remote still exist so the script doesn't break on death
+	local character = workspace:FindFirstChild("Characters") and workspace.Characters:FindFirstChild("CHILLxBABY_100")
+	if character and character:FindFirstChild("Humanoid") then
+		local remote = character.Humanoid:FindFirstChild("")
+		
+		if remote then
+			-- task.spawn prevents the loop from stalling if the server takes too long to respond
+			task.spawn(function()
+				remote:InvokeServer(unpack(args, 1, args.n or #args))
+			end)
+		end
+	end
+end
+
 print("[Tiny Gui] Final loaded with 2.5x and 3.5x Dash Multipliers Added")
