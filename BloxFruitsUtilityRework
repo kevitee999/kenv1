@@ -22,9 +22,13 @@ local infSoru = false
 local jump500Toggle = false
 local dashToggle = false
 local dashMultiplier = 1.5
+local fastFallToggle = false
 
 local lastSafeJump = 0
 local configFile = "TinyGuiSettings.json"
+
+local normalGravity = 196.2
+local fastFallGravity = 1500 -- Changed to 1500 for smooth, stutter-free instant falling
 
 -- ==========================
 -- CONFIG
@@ -41,7 +45,8 @@ local function SaveConfig()
 				noclip = noclip,
 				jump500Toggle = jump500Toggle,
 				dashToggle = dashToggle,
-				dashMultiplier = dashMultiplier
+				dashMultiplier = dashMultiplier,
+				fastFallToggle = fastFallToggle
 			}))
 		end)
 	end
@@ -61,6 +66,7 @@ local function LoadConfig()
 				jump500Toggle = d.jump500Toggle or false
 				dashToggle = d.dashToggle or false
 				dashMultiplier = d.dashMultiplier or 1.5
+				fastFallToggle = d.fastFallToggle or false
 			end
 		end)
 	end
@@ -121,6 +127,19 @@ MainFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
 MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
 
+-- Gravity Side Panel Button
+local GravityBtn = Instance.new("TextButton")
+GravityBtn.Size = UDim2.new(0, 75, 0, 55)
+GravityBtn.Position = UDim2.new(0, 135, 0, 100) -- Next to the main UI list
+GravityBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+GravityBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
+GravityBtn.TextColor3 = fastFallToggle and Color3.fromRGB(255, 235, 50) or Color3.fromRGB(200, 200, 200)
+GravityBtn.TextSize = 14
+GravityBtn.Font = Enum.Font.GothamBold
+GravityBtn.Text = "gravity\n" .. (fastFallToggle and "ON" or "OFF")
+GravityBtn.Visible = false
+GravityBtn.Parent = ScreenGui
+
 local UIListLayout = Instance.new("UIListLayout")
 UIListLayout.Parent = MainFrame
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -140,6 +159,7 @@ PingBtn.InputBegan:Connect(function(input)
 				c:Disconnect()
 				if movedDistance < 6 then
 					MainFrame.Visible = not MainFrame.Visible
+					GravityBtn.Visible = MainFrame.Visible -- Sync visibility with main frame
 				end
 			end
 		end)
@@ -303,7 +323,8 @@ local function toggleFly()
 		flightGyro.Responsiveness = 200
 		flightGyro.CFrame = Camera.CFrame
 	else
-		workspace.Gravity = 196.2
+		-- When fly disables, revert to appropriate gravity
+		workspace.Gravity = normalGravity
 		if flightAttachment then flightAttachment:Destroy() end
 		if flightVelocity then flightVelocity:Destroy() end
 		if flightGyro then flightGyro:Destroy() end
@@ -316,6 +337,14 @@ UserInputService.InputBegan:Connect(function(input, gp)
 	if input.KeyCode == Enum.KeyCode.P then
 		toggleFly()
 	end
+end)
+
+GravityBtn.MouseButton1Click:Connect(function()
+	fastFallToggle = not fastFallToggle
+	GravityBtn.Text = "gravity\n" .. (fastFallToggle and "ON" or "OFF")
+	-- Switch to yellow when ON for easy visibility
+	GravityBtn.TextColor3 = fastFallToggle and Color3.fromRGB(255, 235, 50) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 end)
 
 SpeedBox.FocusLost:Connect(function()
@@ -423,7 +452,7 @@ LocalPlayer.CharacterAdded:Connect(function()
 		flying = false
 		FlyBtn.Text = "Fly [P]: OFF"
 		FlyBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-		workspace.Gravity = 196.2
+		workspace.Gravity = normalGravity
 		noclip = false
 		SaveConfig()
 	end
@@ -457,26 +486,35 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 -- ==========================
--- HEARTBEAT: Safe Mode + Noclip during Safe Mode
+-- HEARTBEAT: Safe Mode, Noclip & Gravity Override
 -- ==========================
+local lastHealth = 0
+
 RunService.Heartbeat:Connect(function()
 	local char = LocalPlayer.Character
 	if not char then return end
 
 	local hum = char:FindFirstChildOfClass("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
 
 	-- SAFE MODE: on at threshold, off only at max HP
 	if hum and hum.Health > 0 then
 		if safeMode then
-			if hum.Health <= safeModeHp then
+			-- ONLY trigger if your health goes DOWN (meaning you just took damage) and is under the threshold
+			if hum.Health < lastHealth and hum.Health <= safeModeHp then
 				safeModeTriggered = true
 			end
+			
+			-- Turn off when you heal to full
 			if safeModeTriggered and hum.Health >= (hum.MaxHealth - 1) then
 				safeModeTriggered = false
 			end
 		else
 			safeModeTriggered = false
 		end
+		
+		-- Update lastHealth for the next frame check
+		lastHealth = hum.Health
 	end
 
 	-- Noclip ON during safe mode
@@ -484,6 +522,20 @@ RunService.Heartbeat:Connect(function()
 		noclip = true
 	else
 		noclip = flying
+	end
+	
+	-- Fast Fall Gravity Check (Smooth, no stuttering)
+	if not flying and hum and hrp then
+		if fastFallToggle then
+			-- Using FloorMaterial == Air is much more reliable than Freefall state
+			if hum.FloorMaterial == Enum.Material.Air and hrp.AssemblyLinearVelocity.Y < -2 then
+				workspace.Gravity = fastFallGravity
+			else
+				workspace.Gravity = normalGravity
+			end
+		else
+			workspace.Gravity = normalGravity
+		end
 	end
 end)
 
@@ -566,5 +618,4 @@ RunService.Stepped:Connect(function()
 	end
 end)
 
---Ghost v spam
-print("[Tiny Gui] Final | Safe Mode: fly up + noclip ON")
+print("[Tiny Gui] Loaded Final - Smooth Gravity & Smart Safe Mode")
