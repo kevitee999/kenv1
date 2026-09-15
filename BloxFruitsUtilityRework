@@ -1,4 +1,4 @@
---added fast attacks
+--added spectate
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -24,13 +24,18 @@ local jump500Toggle = false
 local dashToggle = false
 local dashMultiplier = 1.5
 local fastFallToggle = false
-local fastAttack = false  -- NEW
+local fastAttack = false
 
 local lastSafeJump = 0
 local configFile = "TinyGuiSettings.json"
 
 local normalGravity = 196.2
-local fastFallGravity = 1500 -- Changed to 1500 for smooth, stutter-free instant falling
+local fastFallGravity = 1500
+
+-- Spectate
+local spectating = false
+local currentSpectateTarget = nil
+local spectateButtons = {}
 
 -- ==========================
 -- CONFIG
@@ -49,7 +54,7 @@ local function SaveConfig()
 				dashToggle = dashToggle,
 				dashMultiplier = dashMultiplier,
 				fastFallToggle = fastFallToggle,
-				fastAttack = fastAttack  -- NEW
+				fastAttack = fastAttack
 			}))
 		end)
 	end
@@ -70,7 +75,7 @@ local function LoadConfig()
 				dashToggle = d.dashToggle or false
 				dashMultiplier = d.dashMultiplier or 1.5
 				fastFallToggle = d.fastFallToggle or false
-				fastAttack = d.fastAttack or false  -- NEW
+				fastAttack = d.fastAttack or false
 			end
 		end)
 	end
@@ -78,7 +83,7 @@ end
 LoadConfig()
 
 -- ==========================
--- REMOTES HOOK (Energy Save Only)
+-- REMOTES HOOK
 -- ==========================
 pcall(function()
 	local mt = getrawmetatable(game)
@@ -112,6 +117,7 @@ else
 	ScreenGui.Parent = game.CoreGui
 end
 
+-- Ping Button
 local PingBtn = Instance.new("TextButton")
 PingBtn.Size = UDim2.new(0, 105, 0, 28)
 PingBtn.Position = UDim2.new(0, 20, 0, 20)
@@ -123,18 +129,47 @@ PingBtn.Font = Enum.Font.GothamBold
 PingBtn.Text = "Ping: 0"
 PingBtn.Parent = ScreenGui
 
+-- Spectate Button (RIGHT UNDER PING)
+local SpectateBtn = Instance.new("TextButton")
+SpectateBtn.Size = UDim2.new(0, 105, 0, 28)
+SpectateBtn.Position = UDim2.new(0, 20, 0, 52)
+SpectateBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+SpectateBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
+SpectateBtn.TextColor3 = Color3.fromRGB(255, 235, 50)
+SpectateBtn.TextSize = 13
+SpectateBtn.Font = Enum.Font.GothamBold
+SpectateBtn.Text = "Spectate ▼"
+SpectateBtn.Parent = ScreenGui
+
+-- Spectate List
+local SpectateFrame = Instance.new("ScrollingFrame")
+SpectateFrame.Size = UDim2.new(0, 140, 0, 180)
+SpectateFrame.Position = UDim2.new(0, 20, 0, 84)
+SpectateFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+SpectateFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+SpectateFrame.ScrollBarThickness = 4
+SpectateFrame.Visible = false
+SpectateFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+SpectateFrame.Parent = ScreenGui
+
+local SpectateListLayout = Instance.new("UIListLayout")
+SpectateListLayout.Parent = SpectateFrame
+SpectateListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SpectateListLayout.Padding = UDim.new(0, 2)
+
+-- Main Frame
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 110, 0, 282) -- Increased height for new button
-MainFrame.Position = UDim2.new(0, 20, 0, 52)
+MainFrame.Size = UDim2.new(0, 110, 0, 300)
+MainFrame.Position = UDim2.new(0, 20, 0, 84)
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
 MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
 
--- Gravity Side Panel Button
+-- Gravity Button
 local GravityBtn = Instance.new("TextButton")
 GravityBtn.Size = UDim2.new(0, 75, 0, 55)
-GravityBtn.Position = UDim2.new(0, 135, 0, 100)
+GravityBtn.Position = UDim2.new(0, 135, 0, 132)
 GravityBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 GravityBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
 GravityBtn.TextColor3 = fastFallToggle and Color3.fromRGB(255, 235, 50) or Color3.fromRGB(200, 200, 200)
@@ -144,12 +179,112 @@ GravityBtn.Text = "gravity\n" .. (fastFallToggle and "ON" or "OFF")
 GravityBtn.Visible = false
 GravityBtn.Parent = ScreenGui
 
+-- ==========================
+-- SPECTATE FUNCTIONS
+-- ==========================
+local function StopSpectate()
+	spectating = false
+	currentSpectateTarget = nil
+	if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+		Camera.CameraSubject = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+	end
+	for _, btn in pairs(spectateButtons) do
+		if btn and btn.Parent then
+			btn.TextColor3 = Color3.fromRGB(255, 255, 180)
+		end
+	end
+end
+
+local function StartSpectate(player)
+	if not player or not player.Character then return end
+	local hum = player.Character:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	spectating = true
+	currentSpectateTarget = player
+	Camera.CameraSubject = hum
+end
+
+local function RefreshSpectateList()
+	for _, btn in pairs(spectateButtons) do
+		if btn and btn.Parent then
+			btn:Destroy()
+		end
+	end
+	spectateButtons = {}
+
+	local ySize = 0
+	for _, player in pairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer then
+			local btn = Instance.new("TextButton")
+			btn.Size = UDim2.new(1, -4, 0, 24)
+			btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+			btn.BorderColor3 = Color3.fromRGB(60, 60, 60)
+			btn.TextColor3 = Color3.fromRGB(255, 255, 180) -- Bright & clear
+			btn.TextSize = 13
+			btn.Font = Enum.Font.GothamBold
+			btn.TextStrokeTransparency = 0.6
+			btn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+			btn.Text = player.DisplayName
+			btn.Parent = SpectateFrame
+
+			if currentSpectateTarget == player then
+				btn.TextColor3 = Color3.fromRGB(255, 80, 80)
+			end
+
+			btn.MouseButton1Click:Connect(function()
+				if currentSpectateTarget == player then
+					StopSpectate()
+					btn.TextColor3 = Color3.fromRGB(255, 255, 180)
+				else
+					StopSpectate()
+					StartSpectate(player)
+					btn.TextColor3 = Color3.fromRGB(255, 80, 80)
+				end
+			end)
+
+			table.insert(spectateButtons, btn)
+			ySize = ySize + 26
+		end
+	end
+	SpectateFrame.CanvasSize = UDim2.new(0, 0, 0, ySize)
+end
+
+SpectateBtn.MouseButton1Click:Connect(function()
+	SpectateFrame.Visible = not SpectateFrame.Visible
+	SpectateBtn.Text = SpectateFrame.Visible and "Spectate ▲" or "Spectate ▼"
+	if SpectateFrame.Visible then
+		RefreshSpectateList()
+	end
+end)
+
+Players.PlayerAdded:Connect(function()
+	if SpectateFrame.Visible then
+		task.wait(0.3)
+		RefreshSpectateList()
+	end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	if currentSpectateTarget == player then
+		StopSpectate()
+	end
+	if SpectateFrame.Visible then
+		task.wait(0.1)
+		RefreshSpectateList()
+	end
+end)
+
+-- ==========================
+-- MAIN UI LAYOUT
+-- ==========================
 local UIListLayout = Instance.new("UIListLayout")
 UIListLayout.Parent = MainFrame
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 UIListLayout.Padding = UDim.new(0, 2)
 
+-- Dragging
 local dragging, dragInput, dragStart, startPos, movedDistance = false, nil, nil, nil, 0
+
 PingBtn.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		dragging = true
@@ -169,19 +304,29 @@ PingBtn.InputBegan:Connect(function(input)
 		end)
 	end
 end)
+
 PingBtn.InputChanged:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
 		dragInput = input
 	end
 end)
+
 UserInputService.InputChanged:Connect(function(input)
 	if input == dragInput and dragging then
 		local delta = input.Position - dragStart
 		movedDistance = delta.Magnitude
-		PingBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		local newX = startPos.X.Offset + delta.X
+		local newY = startPos.Y.Offset + delta.Y
+
+		PingBtn.Position = UDim2.new(0, newX, 0, newY)
+		SpectateBtn.Position = UDim2.new(0, newX, 0, newY + 32)
+		SpectateFrame.Position = UDim2.new(0, newX, 0, newY + 64)
+		MainFrame.Position = UDim2.new(0, newX, 0, newY + 64)
+		GravityBtn.Position = UDim2.new(0, newX + 115, 0, newY + 112)
 	end
 end)
 
+-- Ping updater
 task.spawn(function()
 	while task.wait(0.5) do
 		local pingVal = 0
@@ -253,12 +398,11 @@ if dashToggle then DashBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
 
 local DashDropdownBtn = createButton("Dash Mult: " .. tostring(dashMultiplier) .. "x v", MainFrame)
 
--- NEW Fast Attack Button
 local FastAttackBtn = createButton("Fast Attack: " .. (fastAttack and "ON" or "OFF"), MainFrame)
 if fastAttack then FastAttackBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
 
 local OptionsFrame = Instance.new("Frame")
-OptionsFrame.Size = UDim2.new(1, 0, 0, 108)
+OptionsFrame.Size = UDim2.new(1, 0, 0, 130)
 OptionsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 OptionsFrame.BorderColor3 = Color3.fromRGB(60, 60, 60)
 OptionsFrame.Visible = false
@@ -268,7 +412,7 @@ local UIList = Instance.new("UIListLayout")
 UIList.SortOrder = Enum.SortOrder.LayoutOrder
 UIList.Parent = OptionsFrame
 
-local multipliers = {1.5, 2.0, 2.5, 3.0, 3.5, 5.0}
+local multipliers = {1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 5.0}
 
 for _, mult in ipairs(multipliers) do
 	local opt = Instance.new("TextButton")
@@ -451,7 +595,6 @@ DashBtn.MouseButton1Click:Connect(function()
 	SaveConfig()
 end)
 
--- NEW Fast Attack Toggle
 FastAttackBtn.MouseButton1Click:Connect(function()
 	fastAttack = not fastAttack
 	FastAttackBtn.Text = "Fast Attack: " .. (fastAttack and "ON" or "OFF")
@@ -469,9 +612,11 @@ LocalPlayer.CharacterAdded:Connect(function()
 		noclip = false
 		SaveConfig()
 	end
+	if spectating then
+		StopSpectate()
+	end
 end)
 
--- Manual jump boost + inf jump
 UserInputService.JumpRequest:Connect(function()
 	local char = LocalPlayer.Character
 	if not char then return end
@@ -498,9 +643,7 @@ UserInputService.JumpRequest:Connect(function()
 	end
 end)
 
--- ==========================
--- FAST ATTACK LOGIC (NEW)
--- ==========================
+-- Fast Attack
 local function GetNearbyTargets(range)
 	local targets = {}
 	local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -536,7 +679,6 @@ task.spawn(function()
 			pcall(function()
 				local char = LocalPlayer.Character
 				if not char then return end
-
 				local tool = char:FindFirstChildOfClass("Tool")
 				if not tool then return end
 
@@ -557,7 +699,6 @@ task.spawn(function()
 							table.insert(hitList, {target, head})
 						end
 					end
-
 					if #hitList > 0 then
 						attackRemote:FireServer(0.000000002)
 						hitRemote:FireServer(hitList[1][2], hitList)
@@ -568,15 +709,11 @@ task.spawn(function()
 	end
 end)
 
--- ==========================
--- HEARTBEAT: Safe Mode, Noclip & Gravity Override
--- ==========================
+-- Heartbeat
 local lastHealth = 0
-
 RunService.Heartbeat:Connect(function()
 	local char = LocalPlayer.Character
 	if not char then return end
-
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 
@@ -585,14 +722,12 @@ RunService.Heartbeat:Connect(function()
 			if hum.Health < lastHealth and hum.Health <= safeModeHp then
 				safeModeTriggered = true
 			end
-			
 			if safeModeTriggered and hum.Health >= (hum.MaxHealth - 1) then
 				safeModeTriggered = false
 			end
 		else
 			safeModeTriggered = false
 		end
-		
 		lastHealth = hum.Health
 	end
 
@@ -601,7 +736,7 @@ RunService.Heartbeat:Connect(function()
 	else
 		noclip = flying
 	end
-	
+
 	if not flying and hum and hrp then
 		if fastFallToggle then
 			if hum.FloorMaterial == Enum.Material.Air and hrp.AssemblyLinearVelocity.Y < -2 then
@@ -615,13 +750,10 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
--- ==========================
--- RENDER: Jump, Fly, & Dash Attributes
--- ==========================
+-- Render
 RunService.RenderStepped:Connect(function()
 	local char = LocalPlayer.Character
 	if not char then return end
-
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	if not hum or not hrp then return end
@@ -637,18 +769,14 @@ RunService.RenderStepped:Connect(function()
 	if jump500Toggle or safeModeTriggered then
 		hum.UseJumpPower = true
 		hum.JumpPower = 500
-		pcall(function()
-			hum.JumpHeight = 50
-		end)
+		pcall(function() hum.JumpHeight = 50 end)
 
 		if safeModeTriggered and tick() - lastSafeJump > 0.1 then
 			if flying and flightVelocity then
 				flightVelocity.VectorVelocity = Vector3.new(0, math.max(flySpeed, 80), 0)
 			else
 				hum.Jump = true
-				pcall(function()
-					hum:ChangeState(Enum.HumanoidStateType.Jumping)
-				end)
+				pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
 				local vel = hrp.AssemblyLinearVelocity
 				hrp.AssemblyLinearVelocity = Vector3.new(vel.X, 180, vel.Z)
 			end
@@ -657,9 +785,7 @@ RunService.RenderStepped:Connect(function()
 	else
 		hum.UseJumpPower = true
 		hum.JumpPower = 50
-		pcall(function()
-			hum.JumpHeight = 7.2
-		end)
+		pcall(function() hum.JumpHeight = 7.2 end)
 	end
 
 	if flying and flightVelocity and flightGyro then
@@ -676,9 +802,16 @@ RunService.RenderStepped:Connect(function()
 		end
 		flightGyro.CFrame = Camera.CFrame
 	end
+
+	if spectating and currentSpectateTarget and currentSpectateTarget.Character then
+		local hum2 = currentSpectateTarget.Character:FindFirstChildOfClass("Humanoid")
+		if hum2 and Camera.CameraSubject ~= hum2 then
+			Camera.CameraSubject = hum2
+		end
+	end
 end)
 
--- NOCLIP
+-- Noclip
 RunService.Stepped:Connect(function()
 	if noclip and LocalPlayer.Character then
 		for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
@@ -689,4 +822,4 @@ RunService.Stepped:Connect(function()
 	end
 end)
 
-print("[Tiny Gui] Loaded Final - Smooth Gravity & Smart Safe Mode + Fast Attack")
+print("[Tiny Gui] Loaded successfully")
