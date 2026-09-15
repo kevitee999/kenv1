@@ -1,0 +1,67 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+local ServerBrowser = ReplicatedStorage:WaitForChild("__ServerBrowser")
+local MaxPlayers = Players.MaxPlayers
+local CurrentJobId = game.JobId
+
+-- Set your preferred region filter (e.g., "Singapore", "United States", "Germany"). 
+-- Set to "" to hop to any available region.
+local TARGET_REGION = "Singapore" 
+
+local function serverHop()
+    print("[Server Hop] Scanning available servers...")
+    
+    local validServers = {}
+    local completedPages = 0
+    local totalPages = 100
+
+    -- Fetch server list pages from __ServerBrowser
+    for page = 1, totalPages do
+        task.delay(page * 0.02, function()
+            local success, pageData = pcall(function()
+                return ServerBrowser:InvokeServer(page)
+            end)
+
+            if success and type(pageData) == "table" then
+                for jobId, info in pairs(pageData) do
+                    -- Exclude current server and full servers
+                    if jobId ~= CurrentJobId and info.Count < MaxPlayers then
+                        local regionMatches = (TARGET_REGION == "") 
+                            or (info.Region and info.Region:lower():find(TARGET_REGION:lower()))
+
+                        if regionMatches then
+                            table.insert(validServers, {
+                                JobId = jobId,
+                                Region = info.Region,
+                                Count = info.Count
+                            })
+                        end
+                    end
+                end
+            end
+            
+            completedPages = completedPages + 1
+        end)
+    end
+
+    -- Wait until all pages finish loading
+    while completedPages < totalPages do
+        task.wait(0.1)
+    end
+
+    if #validServers == 0 then
+        warn("[Server Hop] No matching servers found for region:", TARGET_REGION ~= "" and TARGET_REGION or "Any")
+        return
+    end
+
+    -- Pick a random valid server and teleport
+    local selectedServer = validServers[math.random(1, #validServers)]
+    print(string.format("[Server Hop] Teleporting to %s (%d/%d players) | JobId: %s", 
+        selectedServer.Region, selectedServer.Count, MaxPlayers, selectedServer.JobId))
+
+    ServerBrowser:InvokeServer("teleport", selectedServer.JobId)
+end
+
+-- Execute server hop
+serverHop()
