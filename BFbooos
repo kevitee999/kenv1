@@ -1,3 +1,4 @@
+--fixed
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -253,14 +254,12 @@ local function flyStraightUpReal()
         local humanoid = char:WaitForChild("Humanoid", 10)
         if not root or not humanoid then return end
 
-        -- Set state to swimming/freefall so the server accepts network velocity replication without resetting position
         pcall(function()
             humanoid:ChangeState(Enum.HumanoidStateType.Swimming)
         end)
 
         Notify("Real Flight", "Flying straight up (replicated to friends) at speed 180...", 3)
 
-        -- Continuously override network velocity to force server and other players to see the movement
         RunService.Heartbeat:Connect(function()
             if root and root.Parent then
                 root.AssemblyLinearVelocity = Vector3.new(0, 180, 0)
@@ -274,7 +273,6 @@ local function ServerHop(preferRegion)
     if isHopping then return end
     isHopping = true
 
-    -- Start real replicated flight straight up
     flyStraightUpReal()
 
     task.spawn(function()
@@ -363,7 +361,15 @@ task.spawn(function()
     Notify("Navigation", "Flying to Magma Island...", 3)
     tweenTo(CFrame.new(TargetPos))
 
-    -- Step 2: Check for Boss
+    -- Step 2: Ensure we stay at the destination/boss area for at least 5 seconds before evaluating
+    Notify("Area Check", "Securing position for 5 seconds...", 2)
+    local waitStart = tick()
+    while tick() - waitStart < 5 do
+        tweenTo(CFrame.new(TargetPos))
+        task.wait(0.5)
+    end
+
+    -- Step 3: Check for Boss after the mandatory wait window
     local enemyFolder = workspace:WaitForChild("Enemies", 10)
     local boss = enemyFolder and enemyFolder:FindFirstChild(BossName)
 
@@ -373,8 +379,8 @@ task.spawn(function()
         return
     end
 
-    -- Step 3: Boss Combat Loop
-    Notify("Boss Found", "Engaging " .. BossName .. "!", 3)
+    -- Step 4: Boss Combat Loop
+    Notify("Boss Found", "Engaging " .. BossName + "!", 3)
     while boss and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 do
         local bossHrp = boss:FindFirstChild("HumanoidRootPart")
         if bossHrp then
@@ -383,7 +389,7 @@ task.spawn(function()
         task.wait(0.1)
     end
 
-    -- Step 4: Boss defeated -> Real fly up and Server Hop
+    -- Step 5: Boss defeated -> Real fly up and Server Hop
     Notify("Target Defeated", BossName .. " killed! Flying up & hopping...", 4)
     ServerHop(TARGET_REGION)
 end)
