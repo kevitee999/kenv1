@@ -1,5 +1,5 @@
---added spectate
--- Services
+--optimized
+- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -36,6 +36,9 @@ local fastFallGravity = 1500
 local spectating = false
 local currentSpectateTarget = nil
 local spectateButtons = {}
+
+-- Fast Attack control
+local fastAttackThread = nil
 
 -- ==========================
 -- CONFIG
@@ -219,7 +222,7 @@ local function RefreshSpectateList()
 			btn.Size = UDim2.new(1, -4, 0, 24)
 			btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 			btn.BorderColor3 = Color3.fromRGB(60, 60, 60)
-			btn.TextColor3 = Color3.fromRGB(255, 255, 180) -- Bright & clear
+			btn.TextColor3 = Color3.fromRGB(255, 255, 180)
 			btn.TextSize = 13
 			btn.Font = Enum.Font.GothamBold
 			btn.TextStrokeTransparency = 0.6
@@ -595,12 +598,100 @@ DashBtn.MouseButton1Click:Connect(function()
 	SaveConfig()
 end)
 
+-- ==========================
+-- FAST ATTACK (Improved)
+-- ==========================
+local function GetNearbyTargets(range)
+	local targets = {}
+	local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if not root then return targets end
+
+	for _, enemy in pairs(workspace.Enemies:GetChildren()) do
+		local hum = enemy:FindFirstChildOfClass("Humanoid")
+		local hrp = enemy:FindFirstChild("HumanoidRootPart")
+		if hum and hrp and hum.Health > 0 then
+			if (hrp.Position - root.Position).Magnitude <= range then
+				table.insert(targets, enemy)
+			end
+		end
+	end
+
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character then
+			local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+			local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+			if hum and hrp and hum.Health > 0 then
+				if (hrp.Position - root.Position).Magnitude <= range then
+					table.insert(targets, plr.Character)
+				end
+			end
+		end
+	end
+	return targets
+end
+
+local function StartFastAttack()
+	if fastAttackThread then return end
+
+	fastAttackThread = task.spawn(function()
+		while fastAttack do
+			pcall(function()
+				local char = LocalPlayer.Character
+				if not char then return end
+				local tool = char:FindFirstChildOfClass("Tool")
+				if not tool then return end
+
+				local targets = GetNearbyTargets(60)
+				if #targets == 0 then return end
+
+				local Net = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Net")
+				if not Net then return end
+
+				local attackRemote = Net:FindFirstChild("RE/RegisterAttack")
+				local hitRemote = Net:FindFirstChild("RE/RegisterHit")
+
+				if attackRemote and hitRemote then
+					local hitList = {}
+					for _, target in pairs(targets) do
+						local head = target:FindFirstChild("Head") or target.PrimaryPart
+						if head then
+							table.insert(hitList, {target, head})
+						end
+					end
+					if #hitList > 0 then
+						attackRemote:FireServer(0.000000002)
+						hitRemote:FireServer(hitList[1][2], hitList)
+					end
+				end
+			end)
+			task.wait(0.08) -- Reduced lag
+		end
+		fastAttackThread = nil
+	end)
+end
+
+local function StopFastAttack()
+	fastAttack = false
+	fastAttackThread = nil
+end
+
 FastAttackBtn.MouseButton1Click:Connect(function()
 	fastAttack = not fastAttack
 	FastAttackBtn.Text = "Fast Attack: " .. (fastAttack and "ON" or "OFF")
 	FastAttackBtn.TextColor3 = fastAttack and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	
+	if fastAttack then
+		StartFastAttack()
+	else
+		StopFastAttack()
+	end
 	SaveConfig()
 end)
+
+-- Start Fast Attack if it was enabled in config
+if fastAttack then
+	StartFastAttack()
+end
 
 LocalPlayer.CharacterAdded:Connect(function()
 	safeModeTriggered = false
@@ -640,72 +731,6 @@ UserInputService.JumpRequest:Connect(function()
 		end)
 	elseif infJump then
 		hum:ChangeState(Enum.HumanoidStateType.Jumping)
-	end
-end)
-
--- Fast Attack
-local function GetNearbyTargets(range)
-	local targets = {}
-	local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	if not root then return targets end
-
-	for _, enemy in pairs(workspace.Enemies:GetChildren()) do
-		local hum = enemy:FindFirstChildOfClass("Humanoid")
-		local hrp = enemy:FindFirstChild("HumanoidRootPart")
-		if hum and hrp and hum.Health > 0 then
-			if (hrp.Position - root.Position).Magnitude <= range then
-				table.insert(targets, enemy)
-			end
-		end
-	end
-
-	for _, plr in pairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer and plr.Character then
-			local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-			local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-			if hum and hrp and hum.Health > 0 then
-				if (hrp.Position - root.Position).Magnitude <= range then
-					table.insert(targets, plr.Character)
-				end
-			end
-		end
-	end
-	return targets
-end
-
-task.spawn(function()
-	while task.wait(0.03) do
-		if fastAttack then
-			pcall(function()
-				local char = LocalPlayer.Character
-				if not char then return end
-				local tool = char:FindFirstChildOfClass("Tool")
-				if not tool then return end
-
-				local targets = GetNearbyTargets(60)
-				if #targets == 0 then return end
-
-				local Net = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Net")
-				if not Net then return end
-
-				local attackRemote = Net:FindFirstChild("RE/RegisterAttack")
-				local hitRemote = Net:FindFirstChild("RE/RegisterHit")
-
-				if attackRemote and hitRemote then
-					local hitList = {}
-					for _, target in pairs(targets) do
-						local head = target:FindFirstChild("Head") or target.PrimaryPart
-						if head then
-							table.insert(hitList, {target, head})
-						end
-					end
-					if #hitList > 0 then
-						attackRemote:FireServer(0.000000002)
-						hitRemote:FireServer(hitList[1][2], hitList)
-					end
-				end
-			end)
-		end
 	end
 end)
 
