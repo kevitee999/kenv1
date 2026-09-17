@@ -1,0 +1,284 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Feature State Flags
+local espEnabled = false
+local noclipEnabled = false
+local fullbrightEnabled = false
+local speedEnabled = false
+
+-- Speed Multipliers Setup (Cycles on click)
+local speedMultipliers = {1.5, 2.0, 2.5, 3.0, 4.0, 5.0}
+local currentSpeedIdx = 3 -- Default 2.5x
+local speedBoost = speedMultipliers[currentSpeedIdx]
+
+-- ESP Object Tracker
+local espObjects = {}
+local boatsFolder = workspace:WaitForChild("Boats")
+
+-- GUI Creation
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BoatUtilityGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = (gethui and gethui()) or (syn and syn.protect_gui and syn.protect_gui(ScreenGui) and game.CoreGui) or game.CoreGui
+
+-- Floating Toggle Button (Open/Close GUI)
+local OpenCloseBtn = Instance.new("TextButton")
+OpenCloseBtn.Name = "OpenCloseBtn"
+OpenCloseBtn.Size = UDim2.new(0, 80, 0, 28)
+OpenCloseBtn.Position = UDim2.new(0, 20, 0, 180)
+OpenCloseBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+OpenCloseBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
+OpenCloseBtn.TextColor3 = Color3.fromRGB(0, 217, 255)
+OpenCloseBtn.TextSize = 11
+OpenCloseBtn.Font = Enum.Font.SourceSansBold
+OpenCloseBtn.Text = "Toggle Menu"
+OpenCloseBtn.Parent = ScreenGui
+
+-- Main Container Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 180, 0, 220)
+MainFrame.Position = UDim2.new(0, 20, 0, 215)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderColor3 = Color3.fromRGB(60, 60, 60)
+MainFrame.Visible = true
+MainFrame.Parent = ScreenGui
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 25)
+Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Title.BorderColor3 = Color3.fromRGB(60, 60, 60)
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 12
+Title.Font = Enum.Font.SourceSansBold
+Title.Text = "Sea Utility Hub"
+Title.Parent = MainFrame
+
+local Container = Instance.new("Frame")
+Container.Size = UDim2.new(1, -10, 1, -35)
+Container.Position = UDim2.new(0, 5, 0, 30)
+Container.BackgroundTransparency = 1
+Container.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = Container
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 5)
+
+-- Draggable GUI Implementation
+local dragging, dragInput, dragStart, startPos
+local function updateDrag(input)
+	local delta = input.Position - dragStart
+	MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+Title.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = MainFrame.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+Title.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		updateDrag(input)
+	end
+end)
+
+OpenCloseBtn.MouseButton1Click:Connect(function()
+	MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- Button Factory Helper
+local function createButton(text)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, 0, 0, 30)
+	btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	btn.BorderColor3 = Color3.fromRGB(60, 60, 60)
+	btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+	btn.TextSize = 11
+	btn.Font = Enum.Font.SourceSans
+	btn.Text = text
+	btn.Parent = Container
+	return btn
+end
+
+-- ==========================
+-- 1. BOAT ESP SYSTEM
+-- ==========================
+local function createBoatESP(boat)
+	if not boat:IsA("Model") or espObjects[boat] then return end
+
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "BoatESP_Highlight"
+	highlight.FillColor = Color3.fromRGB(0, 217, 255)
+	highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+	highlight.FillTransparency = 0.5
+	highlight.OutlineTransparency = 0
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.Adornee = boat
+	highlight.Enabled = espEnabled
+	highlight.Parent = boat
+
+	local primaryPart = boat.PrimaryPart or boat:FindFirstChildWhichIsA("BasePart")
+	if not primaryPart then return end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "BoatESP_Billboard"
+	billboard.Adornee = primaryPart
+	billboard.Size = UDim2.new(0, 200, 0, 50)
+	billboard.StudsOffset = Vector3.new(0, 6, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Enabled = espEnabled
+	billboard.Parent = boat
+
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Size = UDim2.new(1, 0, 1, 0)
+	textLabel.BackgroundTransparency = 1
+	textLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+	textLabel.TextStrokeTransparency = 0
+	textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	textLabel.TextSize = 12
+	textLabel.Font = Enum.Font.SourceSansBold
+	textLabel.Text = "🚤 " .. boat.Name
+	textLabel.Parent = billboard
+
+	local connection = RunService.Heartbeat:Connect(function()
+		if not boat or not boat.Parent or not primaryPart or not primaryPart.Parent then return end
+		if espEnabled then
+			local char = LocalPlayer.Character
+			if char and char:FindFirstChild("HumanoidRootPart") then
+				local distance = math.floor((char.HumanoidRootPart.Position - primaryPart.Position).Magnitude)
+				textLabel.Text = string.format("🚤 %s\n[%d m]", boat.Name, distance)
+			end
+		end
+	end)
+
+	espObjects[boat] = { Highlight = highlight, Billboard = billboard, Connection = connection }
+end
+
+local function removeBoatESP(boat)
+	if espObjects[boat] then
+		if espObjects[boat].Connection then espObjects[boat].Connection:Disconnect() end
+		if espObjects[boat].Highlight then espObjects[boat].Highlight:Destroy() end
+		if espObjects[boat].Billboard then espObjects[boat].Billboard:Destroy() end
+		espObjects[boat] = nil
+	end
+end
+
+for _, boat in ipairs(boatsFolder:GetChildren()) do createBoatESP(boat) end
+boatsFolder.ChildAdded:Connect(function(boat) task.wait(0.2) createBoatESP(boat) end)
+boatsFolder.ChildRemoved:Connect(removeBoatESP)
+
+local EspBtn = createButton("Boat ESP: OFF")
+EspBtn.MouseButton1Click:Connect(function()
+	espEnabled = not espEnabled
+	EspBtn.Text = "Boat ESP: " .. (espEnabled and "ON" or "OFF")
+	EspBtn.TextColor3 = espEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	for _, esp in pairs(espObjects) do
+		if esp.Highlight then esp.Highlight.Enabled = espEnabled end
+		if esp.Billboard then esp.Billboard.Enabled = espEnabled end
+	end
+end)
+
+-- ==========================
+-- 2. ROCK & TIKI NOCLIP SYSTEM
+-- ==========================
+local function disableCollision(parentInstance)
+	if not parentInstance then return end
+	for _, obj in ipairs(parentInstance:GetDescendants()) do
+		if obj:IsA("BasePart") and obj.CanCollide then
+			obj.CanCollide = false
+		end
+	end
+end
+
+RunService.Stepped:Connect(function()
+	if not noclipEnabled then return end
+	disableCollision(workspace:FindFirstChild("Rocks"))
+	local mapFolder = workspace:FindFirstChild("Map")
+	if mapFolder then disableCollision(mapFolder:FindFirstChild("TikiOutpost")) end
+end)
+
+local NoclipBtn = createButton("Boat Noclip: OFF")
+NoclipBtn.MouseButton1Click:Connect(function()
+	noclipEnabled = not noclipEnabled
+	NoclipBtn.Text = "Boat Noclip: " .. (noclipEnabled and "ON" or "OFF")
+	NoclipBtn.TextColor3 = noclipEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+end)
+
+-- ==========================
+-- 3. FULLBRIGHT SYSTEM
+-- ==========================
+RunService.RenderStepped:Connect(function()
+	if not fullbrightEnabled then return end
+	Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+	Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+	Lighting.Brightness = 2
+	Lighting.ClockTime = 14
+	Lighting.GlobalShadows = false
+	Lighting.FogEnd = 100000
+	Lighting.FogStart = 0
+	
+	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+	if atmosphere then atmosphere.Density = 0 end
+end)
+
+local FullbrightBtn = createButton("Fullbright: OFF")
+FullbrightBtn.MouseButton1Click:Connect(function()
+	fullbrightEnabled = not fullbrightEnabled
+	FullbrightBtn.Text = "Fullbright: " .. (fullbrightEnabled and "ON" or "OFF")
+	FullbrightBtn.TextColor3 = fullbrightEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+end)
+
+-- ==========================
+-- 4. BOAT SPEED & MULTIPLIER
+-- ==========================
+RunService.Heartbeat:Connect(function()
+	if not speedEnabled then return end
+	local char = LocalPlayer.Character
+	if not char then return end
+
+	local humanoid = char:FindFirstChild("Humanoid")
+	if humanoid and humanoid.SeatPart then
+		local seat = humanoid.SeatPart
+		if seat:IsDescendantOf(workspace:FindFirstChild("Boats") or workspace) then
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+				local boatModel = seat:FindFirstAncestorWhichIsA("Model")
+				local rootPart = boatModel and boatModel.PrimaryPart or seat
+				rootPart.CFrame = rootPart.CFrame + (rootPart.CFrame.LookVector * speedBoost)
+			end
+		end
+	end
+end)
+
+local SpeedToggleBtn = createButton("Boat Speed: OFF")
+SpeedToggleBtn.MouseButton1Click:Connect(function()
+	speedEnabled = not speedEnabled
+	SpeedToggleBtn.Text = "Boat Speed: " .. (speedEnabled and "ON" or "OFF")
+	SpeedToggleBtn.TextColor3 = speedEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+end)
+
+local SpeedValBtn = createButton("Speed Value: " .. tostring(speedBoost) .. "x")
+SpeedValBtn.TextColor3 = Color3.fromRGB(0, 217, 255)
+SpeedValBtn.MouseButton1Click:Connect(function()
+	currentSpeedIdx = (currentSpeedIdx % #speedMultipliers) + 1
+	speedBoost = speedMultipliers[currentSpeedIdx]
+	SpeedValBtn.Text = "Speed Value: " .. tostring(speedBoost) .. "x"
+end)
