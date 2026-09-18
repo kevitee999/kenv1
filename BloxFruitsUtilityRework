@@ -1,3 +1,4 @@
+--added raid island esp
 --Islands Added
 --optimized
 --Services
@@ -1121,6 +1122,179 @@ RunService.Stepped:Connect(function()
 			if part:IsA("BasePart") then
 				part.CanCollide = false
 			end
+		end
+	end
+end)
+
+-- ==========================
+-- RAID ESP & TELEPORT (APPENDED)
+-- ==========================
+local raidESPEnabled = false
+local raidESPFolder = nil
+local raidButtons = {}
+local currentRaidTween = nil
+
+-- Expand MainFrame to accommodate the new buttons natively
+MainFrame.Size = UDim2.new(0, 110, 0, MainFrame.Size.Y.Offset + 140)
+
+local RaidESPBtn = createButton("Raid ESP: OFF", MainFrame)
+local RaidDropdownBtn = createButton("Raid Islands ▼", MainFrame)
+
+local RaidFrame = Instance.new("ScrollingFrame")
+RaidFrame.Size = UDim2.new(1, 0, 0, 100)
+RaidFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+RaidFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+RaidFrame.ScrollBarThickness = 2
+RaidFrame.Visible = false
+RaidFrame.Parent = MainFrame
+
+local RaidListLayout = Instance.new("UIListLayout")
+RaidListLayout.Parent = RaidFrame
+RaidListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+RaidListLayout.Padding = UDim.new(0, 2)
+
+local function ClearRaidESP()
+	if raidESPFolder then
+		raidESPFolder:Destroy()
+		raidESPFolder = nil
+	end
+end
+
+local function CreateRaidESP()
+	ClearRaidESP()
+	raidESPFolder = Instance.new("Folder")
+	raidESPFolder.Name = "RaidESPFolder"
+	raidESPFolder.Parent = workspace
+
+	local map = workspace:FindFirstChild("Map")
+	local raidMap = map and map:FindFirstChild("RaidMap")
+	
+	if raidMap then
+		for _, child in pairs(raidMap:GetChildren()) do
+			if string.find(child.Name, "RaidIsland") then
+				local targetPart = child:IsA("Model") and (child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart", true)) or child
+				if targetPart and targetPart:IsA("BasePart") then
+					local part = Instance.new("Part")
+					part.Size = Vector3.new(1, 1, 1)
+					part.Position = targetPart.Position
+					part.Anchored = true
+					part.CanCollide = false
+					part.Transparency = 1
+					part.Parent = raidESPFolder
+
+					local billboard = Instance.new("BillboardGui")
+					billboard.Size = UDim2.new(0, 200, 0, 50)
+					billboard.StudsOffset = Vector3.new(0, 10, 0)
+					billboard.AlwaysOnTop = true
+					billboard.Parent = part
+
+					local label = Instance.new("TextLabel")
+					label.Size = UDim2.new(1, 0, 1, 0)
+					label.BackgroundTransparency = 1
+					label.Text = child.Name
+					label.TextColor3 = Color3.fromRGB(255, 100, 255)
+					label.TextStrokeTransparency = 0.3
+					label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+					label.TextSize = 14
+					label.Font = Enum.Font.GothamBold
+					label.Parent = billboard
+				end
+			end
+		end
+	end
+end
+
+local function StopRaidTween()
+	if currentRaidTween then
+		currentRaidTween:Cancel()
+		currentRaidTween = nil
+	end
+	if not flying and not safeModeTriggered then
+		noclip = false
+	end
+end
+
+local function TweenToRaidIsland(pos, btn)
+	StopRaidTween()
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+
+	noclip = true
+	local distance = (hrp.Position - pos).Magnitude
+	local time = distance / 250 -- Exact 250 speed requirement
+
+	local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
+	currentRaidTween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(pos + Vector3.new(0, 15, 0))})
+	currentRaidTween:Play()
+
+	for _, b in pairs(raidButtons) do
+		if b and b.Parent then b.TextColor3 = Color3.fromRGB(200, 200, 200) end
+	end
+	if btn then btn.TextColor3 = Color3.fromRGB(255, 100, 100) end
+
+	currentRaidTween.Completed:Connect(function()
+		currentRaidTween = nil
+		if btn then btn.TextColor3 = Color3.fromRGB(200, 200, 200) end
+		if not flying and not safeModeTriggered then
+			noclip = false
+		end
+	end)
+end
+
+local function RefreshRaidList()
+	for _, btn in pairs(raidButtons) do
+		if btn and btn.Parent then btn:Destroy() end
+	end
+	raidButtons = {}
+
+	local map = workspace:FindFirstChild("Map")
+	local raidMap = map and map:FindFirstChild("RaidMap")
+	local ySize = 0
+
+	if raidMap then
+		for _, child in pairs(raidMap:GetChildren()) do
+			if string.find(child.Name, "RaidIsland") then
+				local targetPart = child:IsA("Model") and (child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart", true)) or child
+				if targetPart and targetPart:IsA("BasePart") then
+					local btn = createButton(child.Name, RaidFrame)
+					btn.MouseButton1Click:Connect(function()
+						TweenToRaidIsland(targetPart.Position, btn)
+					end)
+					table.insert(raidButtons, btn)
+					ySize = ySize + 20
+				end
+			end
+		end
+	end
+	RaidFrame.CanvasSize = UDim2.new(0, 0, 0, ySize)
+end
+
+RaidESPBtn.MouseButton1Click:Connect(function()
+	raidESPEnabled = not raidESPEnabled
+	RaidESPBtn.Text = "Raid ESP: " .. (raidESPEnabled and "ON" or "OFF")
+	RaidESPBtn.TextColor3 = raidESPEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	
+	if raidESPEnabled then
+		CreateRaidESP()
+	else
+		ClearRaidESP()
+	end
+end)
+
+RaidDropdownBtn.MouseButton1Click:Connect(function()
+	RaidFrame.Visible = not RaidFrame.Visible
+	RaidDropdownBtn.Text = RaidFrame.Visible and "Raid Islands ▲" or "Raid Islands ▼"
+	if RaidFrame.Visible then
+		RefreshRaidList()
+	end
+end)
+
+task.spawn(function()
+	while task.wait(3) do
+		if raidESPEnabled then
+			CreateRaidESP()
 		end
 	end
 end)
