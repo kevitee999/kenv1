@@ -1,3 +1,4 @@
+--Islands Added
 --optimized
 --Services
 local Players = game:GetService("Players")
@@ -6,6 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local Stats = game:GetService("Stats")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -39,6 +41,78 @@ local spectateButtons = {}
 
 -- Fast Attack control
 local fastAttackThread = nil
+
+-- Island ESP + Tween
+local islandESPEnabled = false
+local islandESPFolder = nil
+local currentTween = nil
+local currentTweenTarget = nil
+local islandButtons = {}
+
+-- Island Data
+local Sea1Islands = {
+	{Name = "Middle Town", Pos = Vector3.new(-855, 68, 1626)},
+	{Name = "Jungle", Pos = Vector3.new(-1601, 31, 69)},
+	{Name = "Pirate Village", Pos = Vector3.new(-1156, 18, 3920)},
+	{Name = "Desert", Pos = Vector3.new(1208, 47, 4117)},
+	{Name = "Pirate Starter", Pos = Vector3.new(1075, 15, 1422)},
+	{Name = "Frozen Village", Pos = Vector3.new(1337, 106, -1247)},
+	{Name = "Underwater", Pos = Vector3.new(3929, 3, -1831)},
+	{Name = "Prison", Pos = Vector3.new(4888, 11, 736)},
+	{Name = "Fountain", Pos = Vector3.new(5229, 76, 4090)},
+	{Name = "Colosseum", Pos = Vector3.new(-1319, 13, -2810)},
+	{Name = "Marine Starter", Pos = Vector3.new(-2804, 59, 2085)},
+	{Name = "Mob Island", Pos = Vector3.new(-2908, 3, 5249)},
+	{Name = "Marine Fortress", Pos = Vector3.new(-4710, 6, 4200)},
+	{Name = "Volcano", Pos = Vector3.new(-5324, 19, 8458)},
+	{Name = "Lower Sky", Pos = Vector3.new(-4178, 1096, -354)},
+}
+
+local Sea2Islands = {
+	{Name = "Dark Arena", Pos = Vector3.new(3768, 15, -3448)},
+	{Name = "Factory", Pos = Vector3.new(429, 212, -425)},
+	{Name = "Dock", Pos = Vector3.new(-14, 40, 2700)},
+	{Name = "Cafe", Pos = Vector3.new(-368, 150, 253)},
+	{Name = "Green zone", Pos = Vector3.new(-2269, 73, -2737)},
+	{Name = "Hot and Cold", Pos = Vector3.new(-6027, 30, -5103)},
+	{Name = "Lab", Pos = Vector3.new(-6520, 306, -4748)},
+	{Name = "Graveyard", Pos = Vector3.new(-5682, 49, -954)},
+	{Name = "Cursed Ship", Pos = Vector3.new(-6505, 84, -131)},
+	{Name = "Blue flower", Pos = Vector3.new(-5136, 61, 2393)},
+	{Name = "Skull Island", Pos = Vector3.new(-3030, 319, -10078)},
+	{Name = "Snow Mountain", Pos = Vector3.new(608, 402, -5344)},
+	{Name = "Ice Castle", Pos = Vector3.new(6035, 295, -6633)},
+	{Name = "Usoop Island", Pos = Vector3.new(4741, 9, 2849)},
+}
+
+local Sea3Islands = {
+	{Name = "Hydra town", Pos = Vector3.new(5673, 1013, -315)},
+	{Name = "Training Dummy", Pos = Vector3.new(3570, 10, 298)},
+	{Name = "Castle", Pos = Vector3.new(-5028, 315, -3144)},
+	{Name = "Mansion", Pos = Vector3.new(-12471, 375, -7555)},
+	{Name = "Great Tree", Pos = Vector3.new(3047, 2282, -7341)},
+	{Name = "Tiki", Pos = Vector3.new(-16523, 528, 415)},
+	{Name = "Submerged Island", Pos = Vector3.new(-16264, 26, 1375)},
+	{Name = "Port Town", Pos = Vector3.new(-328, 21, 5510)},
+	{Name = "Haunted Castle", Pos = Vector3.new(-9502, 142, 5530)},
+	{Name = "Mansion Centre", Pos = Vector3.new(-11014, 332, -9156)},
+	{Name = "Ice Cream Land", Pos = Vector3.new(-714, 382, -11023)},
+	{Name = "Cake land", Pos = Vector3.new(-2129, 70, -12297)},
+	{Name = "Choco Land", Pos = Vector3.new(125, 37, -12456)},
+	{Name = "Peanut Land", Pos = Vector3.new(-2182, 89, -10526)},
+}
+
+local function GetCurrentSeaIslands()
+	local placeId = game.PlaceId
+	if placeId == 85211729168715 then
+		return Sea1Islands
+	elseif placeId == 79091703265657 then
+		return Sea2Islands
+	elseif placeId == 100117331123089 then
+		return Sea3Islands
+	end
+	return {}
+end
 
 -- ==========================
 -- CONFIG
@@ -183,6 +257,201 @@ GravityBtn.Visible = false
 GravityBtn.Parent = ScreenGui
 
 -- ==========================
+-- ISLAND ESP + DROPDOWN (NEW)
+-- ==========================
+local IslandESPBtn = Instance.new("TextButton")
+IslandESPBtn.Size = UDim2.new(0, 75, 0, 28)
+IslandESPBtn.Position = UDim2.new(0, 135, 0, 192)
+IslandESPBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+IslandESPBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
+IslandESPBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+IslandESPBtn.TextSize = 12
+IslandESPBtn.Font = Enum.Font.GothamBold
+IslandESPBtn.Text = "Island ESP"
+IslandESPBtn.Visible = false
+IslandESPBtn.Parent = ScreenGui
+
+local IslandDropdownBtn = Instance.new("TextButton")
+IslandDropdownBtn.Size = UDim2.new(0, 75, 0, 28)
+IslandDropdownBtn.Position = UDim2.new(0, 135, 0, 224)
+IslandDropdownBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+IslandDropdownBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
+IslandDropdownBtn.TextColor3 = Color3.fromRGB(255, 235, 50)
+IslandDropdownBtn.TextSize = 12
+IslandDropdownBtn.Font = Enum.Font.GothamBold
+IslandDropdownBtn.Text = "Islands ▼"
+IslandDropdownBtn.Visible = false
+IslandDropdownBtn.Parent = ScreenGui
+
+local IslandFrame = Instance.new("ScrollingFrame")
+IslandFrame.Size = UDim2.new(0, 150, 0, 220)
+IslandFrame.Position = UDim2.new(0, 135, 0, 256)
+IslandFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+IslandFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+IslandFrame.ScrollBarThickness = 4
+IslandFrame.Visible = false
+IslandFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+IslandFrame.Parent = ScreenGui
+
+local IslandListLayout = Instance.new("UIListLayout")
+IslandListLayout.Parent = IslandFrame
+IslandListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+IslandListLayout.Padding = UDim.new(0, 2)
+
+-- Island ESP Functions
+local function ClearIslandESP()
+	if islandESPFolder then
+		islandESPFolder:Destroy()
+		islandESPFolder = nil
+	end
+end
+
+local function CreateIslandESP()
+	ClearIslandESP()
+	islandESPFolder = Instance.new("Folder")
+	islandESPFolder.Name = "IslandESP"
+	islandESPFolder.Parent = workspace
+
+	local islands = GetCurrentSeaIslands()
+	for _, data in ipairs(islands) do
+		local part = Instance.new("Part")
+		part.Size = Vector3.new(1, 1, 1)
+		part.Position = data.Pos
+		part.Anchored = true
+		part.CanCollide = false
+		part.Transparency = 1
+		part.Parent = islandESPFolder
+
+		local billboard = Instance.new("BillboardGui")
+		billboard.Size = UDim2.new(0, 200, 0, 50)
+		billboard.StudsOffset = Vector3.new(0, 8, 0)
+		billboard.AlwaysOnTop = true
+		billboard.Parent = part
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, 0, 1, 0)
+		label.BackgroundTransparency = 1
+		label.Text = data.Name
+		label.TextColor3 = Color3.fromRGB(255, 255, 180)
+		label.TextStrokeTransparency = 0.4
+		label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		label.TextSize = 16
+		label.Font = Enum.Font.GothamBold
+		label.Parent = billboard
+	end
+end
+
+local function StopIslandTween()
+	if currentTween then
+		currentTween:Cancel()
+		currentTween = nil
+	end
+	currentTweenTarget = nil
+	-- Restore normal noclip state
+	if not flying and not safeModeTriggered then
+		noclip = false
+	end
+end
+
+local function TweenToIsland(pos, islandName)
+	StopIslandTween()
+
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+
+	currentTweenTarget = islandName
+	noclip = true -- Enable noclip during travel
+
+	local distance = (hrp.Position - pos).Magnitude
+	local time = distance / 250
+
+	local tweenInfo = TweenInfo.new(time, Enum.EasingStyle.Linear)
+	currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(pos + Vector3.new(0, 5, 0))})
+	currentTween:Play()
+
+	currentTween.Completed:Connect(function()
+		if currentTweenTarget == islandName then
+			currentTween = nil
+			currentTweenTarget = nil
+			if not flying and not safeModeTriggered then
+				noclip = false
+			end
+		end
+	end)
+end
+
+local function RefreshIslandList()
+	for _, btn in pairs(islandButtons) do
+		if btn and btn.Parent then
+			btn:Destroy()
+		end
+	end
+	islandButtons = {}
+
+	local islands = GetCurrentSeaIslands()
+	local ySize = 0
+
+	for _, data in ipairs(islands) do
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, -4, 0, 24)
+		btn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+		btn.BorderColor3 = Color3.fromRGB(60, 60, 60)
+		btn.TextColor3 = Color3.fromRGB(255, 235, 50) -- Same yellow as Spectate
+		btn.TextSize = 12
+		btn.Font = Enum.Font.GothamBold
+		btn.Text = data.Name
+		btn.Parent = IslandFrame
+
+		if currentTweenTarget == data.Name then
+			btn.TextColor3 = Color3.fromRGB(255, 80, 80)
+		end
+
+		btn.MouseButton1Click:Connect(function()
+			if currentTweenTarget == data.Name then
+				-- Stop tween
+				StopIslandTween()
+				btn.TextColor3 = Color3.fromRGB(255, 235, 50)
+			else
+				-- Start tween
+				for _, b in pairs(islandButtons) do
+					if b and b.Parent then
+						b.TextColor3 = Color3.fromRGB(255, 235, 50)
+					end
+				end
+				btn.TextColor3 = Color3.fromRGB(255, 80, 80)
+				TweenToIsland(data.Pos, data.Name)
+			end
+		end)
+
+		table.insert(islandButtons, btn)
+		ySize = ySize + 26
+	end
+	IslandFrame.CanvasSize = UDim2.new(0, 0, 0, ySize)
+end
+
+IslandESPBtn.MouseButton1Click:Connect(function()
+	islandESPEnabled = not islandESPEnabled
+	IslandESPBtn.Text = islandESPEnabled and "Island ESP ON" or "Island ESP"
+	IslandESPBtn.TextColor3 = islandESPEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+
+	if islandESPEnabled then
+		CreateIslandESP()
+	else
+		ClearIslandESP()
+	end
+end)
+
+IslandDropdownBtn.MouseButton1Click:Connect(function()
+	IslandFrame.Visible = not IslandFrame.Visible
+	IslandDropdownBtn.Text = IslandFrame.Visible and "Islands ▲" or "Islands ▼"
+	if IslandFrame.Visible then
+		RefreshIslandList()
+	end
+end)
+
+-- ==========================
 -- SPECTATE FUNCTIONS
 -- ==========================
 local function StopSpectate()
@@ -302,6 +571,12 @@ PingBtn.InputBegan:Connect(function(input)
 				if movedDistance < 6 then
 					MainFrame.Visible = not MainFrame.Visible
 					GravityBtn.Visible = MainFrame.Visible
+					IslandESPBtn.Visible = MainFrame.Visible
+					IslandDropdownBtn.Visible = MainFrame.Visible
+					if not MainFrame.Visible then
+						IslandFrame.Visible = false
+						IslandDropdownBtn.Text = "Islands ▼"
+					end
 				end
 			end
 		end)
@@ -326,6 +601,9 @@ UserInputService.InputChanged:Connect(function(input)
 		SpectateFrame.Position = UDim2.new(0, newX, 0, newY + 64)
 		MainFrame.Position = UDim2.new(0, newX, 0, newY + 64)
 		GravityBtn.Position = UDim2.new(0, newX + 115, 0, newY + 112)
+		IslandESPBtn.Position = UDim2.new(0, newX + 115, 0, newY + 172)
+		IslandDropdownBtn.Position = UDim2.new(0, newX + 115, 0, newY + 204)
+		IslandFrame.Position = UDim2.new(0, newX + 115, 0, newY + 236)
 	end
 end)
 
@@ -664,7 +942,7 @@ local function StartFastAttack()
 					end
 				end
 			end)
-			task.wait(0.08) -- Reduced lag
+			task.wait(0.08)
 		end
 		fastAttackThread = nil
 	end)
@@ -688,7 +966,6 @@ FastAttackBtn.MouseButton1Click:Connect(function()
 	SaveConfig()
 end)
 
--- Start Fast Attack if it was enabled in config
 if fastAttack then
 	StartFastAttack()
 end
@@ -706,6 +983,7 @@ LocalPlayer.CharacterAdded:Connect(function()
 	if spectating then
 		StopSpectate()
 	end
+	StopIslandTween()
 end)
 
 UserInputService.JumpRequest:Connect(function()
@@ -759,7 +1037,7 @@ RunService.Heartbeat:Connect(function()
 	if safeModeTriggered then
 		noclip = true
 	else
-		noclip = flying
+		noclip = flying or (currentTween ~= nil)
 	end
 
 	if not flying and hum and hrp then
@@ -847,4 +1125,4 @@ RunService.Stepped:Connect(function()
 	end
 end)
 
-print("[Tiny Gui] Loaded successfully ch")
+print("[Tiny Gui] Loaded successfully + Island ESP")
