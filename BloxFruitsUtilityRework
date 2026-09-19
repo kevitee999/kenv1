@@ -178,7 +178,7 @@ local Sea3Islands = {
 	{Name = "Castle", Pos = Vector3.new(-5028, 315, -3144)},
 	{Name = "Mansion", Pos = Vector3.new(-12471, 375, -7555)},
 	{Name = "Great Tree", Pos = Vector3.new(3047, 2282, -7341)},
-	{Name = "Tiki", Pos = Vector3.new(-16523, 528, 415)},
+	{Name = "Tiki", Pos = Vector3.new(-16812, 59, 299)},
 	{Name = "Submerged Island", Pos = Vector3.new(-16264, 26, 1375)},
 	{Name = "Port Town", Pos = Vector3.new(-328, 21, 5510)},
 	{Name = "Haunted Castle", Pos = Vector3.new(-9502, 142, 5530)},
