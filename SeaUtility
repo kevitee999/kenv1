@@ -1,3 +1,4 @@
+--added no clip for haunter shiprecks
 --updated
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -230,7 +231,10 @@ RunService.Stepped:Connect(function()
     if not noclipEnabled then return end
     disableCollision(workspace:FindFirstChild("Rocks"))
     local mapFolder = workspace:FindFirstChild("Map")
-    if mapFolder then disableCollision(mapFolder:FindFirstChild("TikiOutpost")) end
+    if mapFolder then 
+        disableCollision(mapFolder:FindFirstChild("TikiOutpost"))
+        disableCollision(mapFolder:FindFirstChild("ShipwreckIsland"))
+    end
     disableCollision(workspace:FindFirstChild("Enemies"))
 end)
 
