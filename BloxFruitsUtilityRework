@@ -332,6 +332,22 @@ MainFrame.Parent = ScreenGui
 -- ==========================
 -- FRUITS ESP (0 LAG & EXACT MATCH) + TWEEN
 -- ==========================
+local SeaBtn = Instance.new("TextButton")
+SeaBtn.Size = UDim2.new(0, 75, 0, 28)
+SeaBtn.Position = UDim2.new(0, 135, 0, 68)
+SeaBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+SeaBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
+SeaBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+SeaBtn.TextSize = 12
+SeaBtn.Font = Enum.Font.GothamBold
+SeaBtn.Text = "Sea"
+SeaBtn.Visible = false
+SeaBtn.Parent = ScreenGui
+
+SeaBtn.MouseButton1Click:Connect(function()
+	loadstring(game:HttpGet("https://raw.githubusercontent.com/kevitee999/kenv1/refs/heads/main/SeaUtility"))()
+end)
+
 local FruitESPBtn = Instance.new("TextButton")
 FruitESPBtn.Size = UDim2.new(0, 75, 0, 28)
 FruitESPBtn.Position = UDim2.new(0, 135, 0, 100)
@@ -374,6 +390,11 @@ FruitListLayout.Padding = UDim.new(0, 2)
 local targetFruitNames = {
 	"Rocket", "Spin", "Blade", "Spring", "Bomb", "Smoke", "Spike", "Flame", "Ice", "Sand", "Dark", "Eagle", "Diamond", "Light", "Rubber", "Ghost", "Magma", "Quake", "Buddha", "Love", "Creation", "Spider", "Sound", "Phoenix", "Portal", "Lightning", "Pain", "Blizzard", "Gravity", "Mammoth", "T-Rex", "Dough", "Shadow", "Venom", "Gas", "Spirit", "Tiger", "Yeti", "Magnet", "Kitsune", "Control", "Dragon"
 }
+
+local validFruitNames = {}
+for _, name in ipairs(targetFruitNames) do
+	validFruitNames[name .. " Fruit"] = true
+end
 
 local function ClearFruitESP()
 	if fruitESPFolder then
@@ -432,8 +453,6 @@ local function RefreshFruitList()
 end
 
 local function UpdateFruitESP()
-	if not fruitESPEnabled then return end
-
 	if not fruitESPFolder or not fruitESPFolder.Parent then
 		fruitESPFolder = Instance.new("Folder")
 		fruitESPFolder.Name = "FruitESPFolder"
@@ -442,106 +461,78 @@ local function UpdateFruitESP()
 
 	local currentFound = {}
 
-	local function processFruit(child)
-		-- Include BasePart in case the fruit is a single MeshPart spawned directly
-		if (child:IsA("Model") or child:IsA("Tool") or child:IsA("BasePart")) then
-			local name = child.Name
-			local isValid = false
-			
-			-- Strict Exact Match to stop picking up effects like "FruitEffect" or random stuff
-			if name == "Fruit" then
-				isValid = true
-			else
-				for _, fruitName in ipairs(targetFruitNames) do
-					if name == fruitName or name == (fruitName .. " Fruit") or name == (fruitName .. "Fruit") then
-						isValid = true
-						break
-					end
-				end
-			end
+	local function processFruit(child, isSpecial)
+		local targetPart = nil
+		if child:IsA("BasePart") then
+			targetPart = child
+		else
+			targetPart = child:FindFirstChild("Handle") or child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
+		end
 
-			if isValid then
-				local targetPart = nil
-				if child:IsA("BasePart") then
-					targetPart = child
+		if targetPart then
+			currentFound[child] = true
+
+			if not activeFruitESPs[child] then
+				local part = Instance.new("Part")
+				part.Size = Vector3.new(1, 1, 1)
+				part.Position = targetPart.Position
+				part.Anchored = true
+				part.CanCollide = false
+				part.Transparency = 1
+				part.Parent = fruitESPFolder
+
+				local billboard = Instance.new("BillboardGui")
+				billboard.Size = UDim2.new(0, 200, 0, 50)
+				billboard.StudsOffset = Vector3.new(0, 3, 0)
+				billboard.AlwaysOnTop = true
+				billboard.Parent = part
+
+				local label = Instance.new("TextLabel")
+				label.Size = UDim2.new(1, 0, 1, 0)
+				label.BackgroundTransparency = 1
+				label.Text = "🍎 " .. child.Name
+				label.TextColor3 = Color3.fromRGB(255, 0, 0)
+				label.TextStrokeTransparency = 0.2
+				label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+				
+				if isSpecial then
+					label.TextSize = 35
 				else
-					targetPart = child:FindFirstChild("Handle") or child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
+					label.TextSize = 25
 				end
 
-				if targetPart then
-					currentFound[child] = true
+				label.Font = Enum.Font.GothamBold
+				label.Parent = billboard
 
-					if not activeFruitESPs[child] then
-						local part = Instance.new("Part")
-						part.Size = Vector3.new(1, 1, 1)
-						part.Position = targetPart.Position
-						part.Anchored = true
-						part.CanCollide = false
-						part.Transparency = 1
-						part.Parent = fruitESPFolder
-
-						local billboard = Instance.new("BillboardGui")
-						billboard.Size = UDim2.new(0, 200, 0, 50)
-						billboard.StudsOffset = Vector3.new(0, 3, 0)
-						billboard.AlwaysOnTop = true
-						billboard.Parent = part
-
-						local label = Instance.new("TextLabel")
-						label.Size = UDim2.new(1, 0, 1, 0)
-						label.BackgroundTransparency = 1
-						label.Text = "🍎 " .. child.Name
-						label.TextColor3 = Color3.fromRGB(255, 0, 0)
-						label.TextStrokeTransparency = 0.2
-						label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-						
-						-- Size 55 for generic "Fruit", 25 for named fruits
-						if child.Name == "Fruit" then
-							label.TextSize = 55
-						else
-							label.TextSize = 25
-						end
-
-						label.Font = Enum.Font.GothamBold
-						label.Parent = billboard
-
-						activeFruitESPs[child] = part
-					else
-						if activeFruitESPs[child] then
-							activeFruitESPs[child].Position = targetPart.Position
-						end
-					end
+				activeFruitESPs[child] = part
+			else
+				if activeFruitESPs[child] then
+					activeFruitESPs[child].Position = targetPart.Position
 				end
 			end
 		end
 	end
 
-	for _, child in ipairs(workspace:GetChildren()) do
-		processFruit(child)
-	end
-
-	local worldOrigin = workspace:FindFirstChild("_WorldOrigin")
-	if worldOrigin then
-		for _, child in ipairs(worldOrigin:GetDescendants()) do
-			processFruit(child)
-		end
-	end
-
+	-- Always process the special workspace["Fruit "].Fruit regardless of toggle
 	local fruitSpaceFolder = workspace:FindFirstChild("Fruit ")
 	if fruitSpaceFolder then
-		-- Catch anything directly inside workspace["Fruit "] as requested
-		for _, child in ipairs(fruitSpaceFolder:GetChildren()) do
-			processFruit(child)
+		local specialFruit = fruitSpaceFolder:FindFirstChild("Fruit")
+		if specialFruit then
+			processFruit(specialFruit, true)
 		end
-		
-		-- Just in case there is a sub-folder actually named "Fruit"
-		local innerFruitFolder = fruitSpaceFolder:FindFirstChild("Fruit")
-		if innerFruitFolder and not innerFruitFolder:IsA("BasePart") then
-			for _, child in ipairs(innerFruitFolder:GetChildren()) do
-				processFruit(child)
+	end
+
+	-- Only process regular fruits in workspace if toggle is ON to reduce lag
+	if fruitESPEnabled then
+		for _, child in ipairs(workspace:GetChildren()) do
+			-- Exact string matching completely filters out fruit effects
+			if validFruitNames[child.Name] then
+				processFruit(child, false)
 			end
 		end
 	end
 
+	-- Clear removed / toggled-off fruit ESPs while maintaining the special fruit
 	for fruitModel, espPart in pairs(activeFruitESPs) do
 		if not currentFound[fruitModel] or not fruitModel.Parent then
 			if espPart then
@@ -564,7 +555,7 @@ FruitESPBtn.MouseButton1Click:Connect(function()
 	if fruitESPEnabled then
 		UpdateFruitESP()
 	else
-		ClearFruitESP()
+		UpdateFruitESP()
 		FruitFrame.Visible = false
 		FruitDropdownBtn.Text = "▶"
 		StopAllTweens()
@@ -582,9 +573,8 @@ end)
 
 task.spawn(function()
 	while task.wait(1) do
-		if fruitESPEnabled then
-			UpdateFruitESP()
-		end
+		-- Always call UpdateFruitESP to keep workspace["Fruit "].Fruit active and tracking
+		UpdateFruitESP()
 	end
 end)
 
@@ -876,6 +866,7 @@ PingBtn.InputBegan:Connect(function(input)
 				c:Disconnect()
 				if movedDistance < 6 then
 					MainFrame.Visible = not MainFrame.Visible
+					SeaBtn.Visible = MainFrame.Visible
 					GravityBtn.Visible = MainFrame.Visible
 					FruitESPBtn.Visible = MainFrame.Visible
 					FruitDropdownBtn.Visible = MainFrame.Visible
@@ -910,6 +901,7 @@ UserInputService.InputChanged:Connect(function(input)
 		SpectateBtn.Position = UDim2.new(0, newX, 0, newY + 32)
 		SpectateFrame.Position = UDim2.new(0, newX, 0, newY + 64)
 		MainFrame.Position = UDim2.new(0, newX, 0, newY + 64)
+		SeaBtn.Position = UDim2.new(0, newX + 115, 0, newY + 48)
 		FruitESPBtn.Position = UDim2.new(0, newX + 115, 0, newY + 80)
 		FruitDropdownBtn.Position = UDim2.new(0, newX + 192, 0, newY + 80)
 		FruitFrame.Position = UDim2.new(0, newX + 115, 0, newY + 112)
@@ -1710,4 +1702,4 @@ task.spawn(function()
 	end
 end)
 
-print("[Tiny Gui] Loaded successfully + Raid ESP fixed lets see eeeeee!")
+print("might be this! added sea")
