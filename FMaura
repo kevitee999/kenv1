@@ -1,0 +1,332 @@
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+local LocalPlayer = Players.LocalPlayer
+
+-- Clean up existing UI if re-executed
+if game:GetService("CoreGui"):FindFirstChild("MoonWidgetGui") then
+    game:GetService("CoreGui").MoonWidgetGui:Destroy()
+end
+
+-- Global State for Kill Aura Toggle
+_G.KillAura = false
+
+-- ScreenGui Setup
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MoonWidgetGui"
+ScreenGui.Parent = game:GetService("CoreGui")
+ScreenGui.ResetOnSpawn = false
+
+-- Mini Toggle Button
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Parent = ScreenGui
+ToggleBtn.Position = UDim2.new(0, 15, 0.45, 0)
+ToggleBtn.Size = UDim2.new(0, 65, 0, 24)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Text = "🌙 UI"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 13
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0, 6)
+ToggleCorner.Parent = ToggleBtn
+
+-- Main Draggable Widget Frame
+local MainWidget = Instance.new("Frame")
+MainWidget.Name = "MainWidget"
+MainWidget.Parent = ScreenGui
+MainWidget.Position = UDim2.new(0.05, 0, 0.4, 0)
+MainWidget.Size = UDim2.new(0, 165, 0, 135)
+MainWidget.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainWidget.BorderSizePixel = 0
+MainWidget.Active = true
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 8)
+MainCorner.Parent = MainWidget
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(45, 45, 45)
+MainStroke.Thickness = 1
+MainStroke.Parent = MainWidget
+
+-- Moon Title Label
+local MoonTitleLabel = Instance.new("TextLabel")
+MoonTitleLabel.Name = "MoonTitleLabel"
+MoonTitleLabel.Parent = MainWidget
+MoonTitleLabel.Position = UDim2.new(0, 10, 0, 6)
+MoonTitleLabel.Size = UDim2.new(1, -20, 0, 18)
+MoonTitleLabel.BackgroundTransparency = 1
+MoonTitleLabel.Text = "Checking..."
+MoonTitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+MoonTitleLabel.Font = Enum.Font.SourceSansBold
+MoonTitleLabel.TextSize = 16
+MoonTitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Moon Phase Ratio Label
+local MoonPhaseLabel = Instance.new("TextLabel")
+MoonPhaseLabel.Name = "MoonPhaseLabel"
+MoonPhaseLabel.Parent = MainWidget
+MoonPhaseLabel.Position = UDim2.new(0, 10, 0, 24)
+MoonPhaseLabel.Size = UDim2.new(1, -20, 0, 16)
+MoonPhaseLabel.BackgroundTransparency = 1
+MoonPhaseLabel.Text = "Moon: --/5"
+MoonPhaseLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+MoonPhaseLabel.Font = Enum.Font.SourceSans
+MoonPhaseLabel.TextSize = 13
+MoonPhaseLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Bright Yellow Timer Label
+local MoonTimerLabel = Instance.new("TextLabel")
+MoonTimerLabel.Name = "MoonTimerLabel"
+MoonTimerLabel.Parent = MainWidget
+MoonTimerLabel.Position = UDim2.new(0, 10, 0, 40)
+MoonTimerLabel.Size = UDim2.new(1, -20, 0, 18)
+MoonTimerLabel.BackgroundTransparency = 1
+MoonTimerLabel.Text = "Timer: --:--"
+MoonTimerLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+MoonTimerLabel.Font = Enum.Font.SourceSansBold
+MoonTimerLabel.TextSize = 14
+MoonTimerLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Kill Aura Button
+local KillAuraBtn = Instance.new("TextButton")
+KillAuraBtn.Name = "KillAuraBtn"
+KillAuraBtn.Parent = MainWidget
+KillAuraBtn.Position = UDim2.new(0.05, 0, 0, 64)
+KillAuraBtn.Size = UDim2.new(0.9, 0, 0, 24)
+KillAuraBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+KillAuraBtn.BorderSizePixel = 0
+KillAuraBtn.Text = "Kill Aura: OFF"
+KillAuraBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+KillAuraBtn.Font = Enum.Font.SourceSansBold
+KillAuraBtn.TextSize = 12
+local KillAuraCorner = Instance.new("UICorner")
+KillAuraCorner.CornerRadius = UDim.new(0, 5)
+KillAuraCorner.Parent = KillAuraBtn
+
+-- Team Switcher Dropdown Button
+local DropdownBtn = Instance.new("TextButton")
+DropdownBtn.Name = "DropdownBtn"
+DropdownBtn.Parent = MainWidget
+DropdownBtn.Position = UDim2.new(0.05, 0, 0, 95)
+DropdownBtn.Size = UDim2.new(0.9, 0, 0, 24)
+DropdownBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+DropdownBtn.BorderSizePixel = 0
+DropdownBtn.Text = "Switch Team ▼"
+DropdownBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+DropdownBtn.Font = Enum.Font.SourceSansBold
+DropdownBtn.TextSize = 12
+local DropCorner = Instance.new("UICorner")
+DropCorner.CornerRadius = UDim.new(0, 5)
+DropCorner.Parent = DropdownBtn
+
+-- Dropdown Menu Container
+local DropContainer = Instance.new("Frame")
+DropContainer.Name = "DropContainer"
+DropContainer.Parent = MainWidget
+DropContainer.Position = UDim2.new(0.05, 0, 0.9, 0)
+DropContainer.Size = UDim2.new(0.9, 0, 0, 48)
+DropContainer.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+DropContainer.Visible = false
+DropContainer.BorderSizePixel = 0
+local DropFrameCorner = Instance.new("UICorner")
+DropFrameCorner.CornerRadius = UDim.new(0, 5)
+DropFrameCorner.Parent = DropContainer
+
+local JoinPirateBtn = Instance.new("TextButton")
+JoinPirateBtn.Name = "JoinPirateBtn"
+JoinPirateBtn.Parent = DropContainer
+JoinPirateBtn.Size = UDim2.new(1, 0, 0.5, 0)
+JoinPirateBtn.BackgroundTransparency = 1
+JoinPirateBtn.Text = "🏴‍☠️ Pirates"
+JoinPirateBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+JoinPirateBtn.Font = Enum.Font.SourceSansBold
+JoinPirateBtn.TextSize = 12
+
+local JoinMarineBtn = Instance.new("TextButton")
+JoinMarineBtn.Name = "JoinMarineBtn"
+JoinMarineBtn.Parent = DropContainer
+JoinMarineBtn.Position = UDim2.new(0, 0, 0.5, 0)
+JoinMarineBtn.Size = UDim2.new(1, 0, 0.5, 0)
+JoinMarineBtn.BackgroundTransparency = 1
+JoinMarineBtn.Text = "⚔️ Marines"
+JoinMarineBtn.TextColor3 = Color3.fromRGB(100, 150, 255)
+JoinMarineBtn.Font = Enum.Font.SourceSansBold
+JoinMarineBtn.TextSize = 12
+
+--------------------------------------------------------------------------------
+-- DRAGGABLE LOGIC
+--------------------------------------------------------------------------------
+local dragging, dragInput, dragStart, startPos
+local function updateInput(input)
+    local delta = input.Position - dragStart
+    MainWidget.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+MainWidget.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainWidget.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+MainWidget.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        updateInput(input)
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- BUTTON INTERACTION & TOGGLES
+--------------------------------------------------------------------------------
+ToggleBtn.MouseButton1Click:Connect(function()
+    MainWidget.Visible = not MainWidget.Visible
+end)
+
+DropdownBtn.MouseButton1Click:Connect(function()
+    DropContainer.Visible = not DropContainer.Visible
+end)
+
+JoinPirateBtn.MouseButton1Click:Connect(function()
+    ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Pirates")
+    DropContainer.Visible = false
+end)
+
+JoinMarineBtn.MouseButton1Click:Connect(function()
+    ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Marines")
+    DropContainer.Visible = false
+end)
+
+-- Kill Aura Toggle Button
+KillAuraBtn.MouseButton1Click:Connect(function()
+    _G.KillAura = not _G.KillAura
+    if _G.KillAura then
+        KillAuraBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 80) -- Green
+        KillAuraBtn.Text = "Kill Aura: ON"
+    else
+        KillAuraBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40) -- Red
+        KillAuraBtn.Text = "Kill Aura: OFF"
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- KILL AURA (Prehistoric Island Method)
+--------------------------------------------------------------------------------
+local Range = 500
+local Delay = 2
+
+task.spawn(function()
+    while task.wait(Delay) do
+        if _G.KillAura then
+            pcall(function()
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+
+                if sethiddenproperty then
+                    sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+                end
+
+                for _, enemy in pairs(workspace.Enemies:GetChildren()) do
+                    if enemy:FindFirstChild("Humanoid") and enemy:FindFirstChild("HumanoidRootPart") then
+                        local dist = (enemy.HumanoidRootPart.Position - hrp.Position).Magnitude
+                        if dist <= Range and enemy.Humanoid.Health > 0 then
+                            enemy.Humanoid.Health = 0
+                            enemy.HumanoidRootPart.CanCollide = false
+                            enemy:BreakJoints()
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+--------------------------------------------------------------------------------
+-- MOON PHASE TEXTURE DETECTION & ACCURATE TIMER
+--------------------------------------------------------------------------------
+local PhaseTextures = {
+    ["9709136820"] = "0/5",
+    ["9709136123"] = "0/5",
+    ["9709135895"] = "0/5",
+    ["9709137525"] = "0/5",
+    ["9709139409"] = "1/5",
+    ["9709139053"] = "1/5",
+    ["9709141700"] = "2/5",
+    ["9709141315"] = "2/5",
+    ["9709143733"] = "3/5",
+    ["9709143210"] = "3/5",
+    ["9709145889"] = "4/5",
+    ["9709145412"] = "4/5",
+    ["9709149431"] = "5/5",
+    ["9709149053"] = "5/5"
+}
+
+task.spawn(function()
+    while task.wait(1) do
+        pcall(function()
+            local sky = Lighting:FindFirstChildOfClass("Sky") or Lighting:FindFirstChild("FantasySky")
+            local moonId = sky and sky.MoonTextureId or ""
+            local clockTime = Lighting.ClockTime
+
+            local currentPhase = "0/5"
+            for id, phase in pairs(PhaseTextures) do
+                if string.find(moonId, id) then
+                    currentPhase = phase
+                    break
+                end
+            end
+
+            MoonPhaseLabel.Text = "Moon: " .. currentPhase
+
+            if currentPhase == "5/5" then
+                MoonTitleLabel.Text = "Full Moon"
+                MoonTitleLabel.TextColor3 = Color3.fromRGB(0, 255, 120)
+
+                local hoursLeft = 0
+                if clockTime >= 18 then
+                    hoursLeft = (24 - clockTime) + 5.5
+                elseif clockTime < 5.5 then
+                    hoursLeft = 5.5 - clockTime
+                else
+                    hoursLeft = (18 - clockTime) + 5.5
+                end
+
+                local realSeconds = math.max(0, math.floor(hoursLeft * 50))
+                local mins = math.floor(realSeconds / 60)
+                local secs = realSeconds % 60
+                MoonTimerLabel.Text = string.format("Ends: %02dm %02ds", mins, secs)
+            else
+                MoonTitleLabel.Text = "Normal Moon"
+                MoonTitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+                local hoursLeft = 0
+                if clockTime >= 18 then
+                    hoursLeft = (24 - clockTime) + 18
+                else
+                    hoursLeft = 18 - clockTime
+                end
+
+                local realSeconds = math.max(0, math.floor(hoursLeft * 50))
+                local mins = math.floor(realSeconds / 60)
+                local secs = realSeconds % 60
+                MoonTimerLabel.Text = string.format("Next: %02dm %02ds", mins, secs)
+            end
+        end)
+    end
+end)
+
+print("Moon Widget + Prehistoric Kill Aura Loaded")
