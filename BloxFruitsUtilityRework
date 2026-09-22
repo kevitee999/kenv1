@@ -1702,4 +1702,7 @@ task.spawn(function()
 	end
 end)
 
+--Full moon status till got kit lamp
+loadstring(game:HttpGet('https://raw.githubusercontent.com/kevitee999/kenv1/refs/heads/main/FMaura'))()
+
 print("might be this! added sea")
