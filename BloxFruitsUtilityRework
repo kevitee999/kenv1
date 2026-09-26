@@ -190,7 +190,7 @@ local Sea3Islands = {
 }
 
 local function GetCurrentSeaIslands()
-	if workspace:FindFirstChild("Great Tree") then
+	if workspace:FindFirstChild("Arenas") and workspace.Arenas:FindFirstChild("FishSlapArena1") then
 		return Sea3Islands
 	elseif workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("Dressrosa") then
 		return Sea2Islands
