@@ -1833,20 +1833,5 @@ end)
 --Full moon status till got kit lamp
 loadstring(game:HttpGet('https://raw.githubusercontent.com/kevitee999/kenv1/refs/heads/main/FMaura'))()
 
---PVP
-task.delay(6, function()
-    print("Attempting to load pvblo...")
-    local success, err = pcall(function()
-        local content = game:HttpGet("https://raw.githubusercontent.com/kevitee999/kenv1/refs/heads/main/pvblo")
-        print("Fetched content length:", #content) -- Checks if it actually downloaded anything
-        loadstring(content)()
-    end)
-    
-    if not success then
-        warn("FAILED TO LOAD: " .. tostring(err))
-    else
-        print("pvblo loaded successfullyy!")
-    end
-end)
 
 print("might be this! added sea")
