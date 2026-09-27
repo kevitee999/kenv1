@@ -1835,11 +1835,17 @@ loadstring(game:HttpGet('https://raw.githubusercontent.com/kevitee999/kenv1/refs
 
 --PVP
 task.delay(6, function()
+    print("Attempting to load pvblo...")
     local success, err = pcall(function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/kevitee999/kenv1/refs/heads/main/pvblo"))()
+        local content = game:HttpGet("https://raw.githubusercontent.com/kevitee999/kenv1/refs/heads/main/pvblo")
+        print("Fetched content length:", #content) -- Checks if it actually downloaded anything
+        loadstring(content)()
     end)
+    
     if not success then
-        warn("Failed to load pvblo script: " .. tostring(err))
+        warn("FAILED TO LOAD: " .. tostring(err))
+    else
+        print("pvblo loaded successfully!")
     end
 end)
 
