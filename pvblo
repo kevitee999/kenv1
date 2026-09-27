@@ -1,6 +1,6 @@
 -- ============================================================
 -- Silent Aim + Cam Lock + Anti Stun + Soru + Auto Ken + Stick
--- FIXED: KEN TOGGLE OFF + SAFE ANTI-STUN
+-- FIXED: KEN TOGGLE OFF + SAFE ANTI-STUN + TOP-LEFT UI
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -719,18 +719,31 @@ local function makeDraggable(frame)
 end
 
 -- ============================================================
--- USER INTERFACE
+-- USER INTERFACE (TOP-LEFT POSITION + DRAGGABLE)
 -- ============================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "CamLockUI"
 gui.ResetOnSpawn = false
-pcall(function()
-	if gethui then gui.Parent = gethui() else gui.Parent = game.CoreGui end
-end)
+
+local function setGuiParent()
+	local success = pcall(function()
+		if gethui then 
+			gui.Parent = gethui() 
+		else 
+			gui.Parent = game.CoreGui 
+		end
+	end)
+	if not success or not gui.Parent then
+		pcall(function()
+			gui.Parent = plr:WaitForChild("PlayerGui")
+		end)
+	end
+end
+setGuiParent()
 
 local panel = Instance.new("Frame")
 panel.Size = UDim2.new(0, 58, 0, 130)
-panel.Position = UDim2.new(0, 10, 0.5, -65)
+panel.Position = UDim2.new(0, 10, 0, 10) -- Moved to Top-Left Area
 panel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 panel.BackgroundTransparency = 0.25
 panel.BorderSizePixel = 0
