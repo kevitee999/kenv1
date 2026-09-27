@@ -1,6 +1,6 @@
 -- ============================================================
--- Silent Aim + Cam Lock + Anti Stun + Soru + Auto Ken + Stick
--- FIXED: KEN TOGGLE OFF + SAFE ANTI-STUN + TOP-LEFT UI
+-- Silent Aim + Cam Lock + Anti Stun + Soru + Auto Ken + Goto Player
+-- UPDATED: LARGER TEXT SIZES FOR DROPDOWN & ESP NAMES
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -27,15 +27,15 @@ local silentAimEnabled = true
 local antiStunEnabled = false
 local soruEnabled = true
 local autoKenEnabled = false
-local stickBehind = false
+local nameEspEnabled = false
 local panelHidden = true
 local highlights = {}
+local nameEspGuis = {}
 local FOV_DEG = 80
 local lastSoru = 0
 local SORU_CD = 0.2
 local STICK_DIST = 3
 
-local HIGHLIGHT_FOV = Color3.fromRGB(80, 255, 120)
 local HIGHLIGHT_TARGET = Color3.fromRGB(255, 0, 0)
 
 local baseWalkSpeed = 16
@@ -238,6 +238,89 @@ local function updateVisuals()
 end
 
 -- ============================================================
+-- NAME ESP (600 STUDS)
+-- ============================================================
+local function clearNameEsp()
+	for v, guiObj in pairs(nameEspGuis) do
+		if guiObj then pcall(function() guiObj:Destroy() end) end
+	end
+	nameEspGuis = {}
+end
+
+local function updateNameEsp()
+	if not nameEspEnabled then
+		clearNameEsp()
+		return
+	end
+	local myChar = getChar()
+	local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	
+	local activePlayers = {}
+	for _, v in ipairs(Players:GetPlayers()) do
+		if v ~= plr and v.Character and v.Character:FindFirstChild("Head") and v.Character:FindFirstChild("HumanoidRootPart") then
+			local hum = v.Character:FindFirstChildOfClass("Humanoid")
+			if hum and hum.Health > 0 then
+				local tHRP = v.Character.HumanoidRootPart
+				if myHRP then
+					local dist = (tHRP.Position - myHRP.Position).Magnitude
+					if dist <= 600 then
+						activePlayers[v] = true
+						local espGui = nameEspGuis[v]
+						if not espGui or not espGui.Parent then
+							espGui = Instance.new("BillboardGui")
+							espGui.Name = "NameESP"
+							espGui.Size = UDim2.new(0, 160, 0, 40)
+							espGui.StudsOffset = Vector3.new(0, 2.5, 0)
+							espGui.AlwaysOnTop = true
+							
+							local txt = Instance.new("TextLabel")
+							txt.Name = "Text"
+							txt.Size = UDim2.new(1, 0, 1, 0)
+							txt.BackgroundTransparency = 1
+							txt.Font = Enum.Font.GothamBold
+							txt.TextSize = 13 -- Larger ESP text size
+							txt.TextColor3 = Color3.fromRGB(255, 50, 50) -- Red
+							txt.TextStrokeTransparency = 0.5
+							txt.Parent = espGui
+							
+							espGui.Adornee = v.Character.Head
+							espGui.Parent = v.Character
+							nameEspGuis[v] = espGui
+						end
+						local txt = espGui:FindFirstChild("Text")
+						if txt then
+							txt.Text = v.DisplayName
+						end
+					else
+						if nameEspGuis[v] then
+							nameEspGuis[v]:Destroy()
+							nameEspGuis[v] = nil
+						end
+					end
+				end
+			else
+				if nameEspGuis[v] then
+					nameEspGuis[v]:Destroy()
+					nameEspGuis[v] = nil
+				end
+			end
+		else
+			if nameEspGuis[v] then
+				nameEspGuis[v]:Destroy()
+				nameEspGuis[v] = nil
+			end
+		end
+	end
+	
+	for v, guiObj in pairs(nameEspGuis) do
+		if not v.Parent or not activePlayers[v] then
+			if guiObj then guiObj:Destroy() end
+			nameEspGuis[v] = nil
+		end
+	end
+end
+
+-- ============================================================
 -- NAMECALL HOOK
 -- ============================================================
 local gg = getrawmetatable(game)
@@ -282,7 +365,7 @@ end)
 setreadonly(gg, true)
 
 -- ============================================================
--- HIGHLIGHTS
+-- HIGHLIGHTS (ONLY TARGET GETS RED HIGHLIGHT)
 -- ============================================================
 local function clearHighlight(char)
 	local h = highlights[char]
@@ -364,10 +447,9 @@ local function doSoruToTarget()
 end
 
 -- ============================================================
--- SAFE ANTI-STUN (DOES NOT BREAK GAME SCRIPTS, CAN TURN OFF)
+-- SAFE ANTI-STUN
 -- ============================================================
 local function applyAntiStun()
-	-- Strictly check toggle state: if off, exit without changing anything
 	if not antiStunEnabled then return end
 	if isUsingOwnMove() then return end
 
@@ -377,13 +459,11 @@ local function applyAntiStun()
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	if not hum or not hrp or hum.Health <= 0 then return end
 
-	-- Zero out Stun value without destroying game instances
 	local stun = char:FindFirstChild("Stun") or hrp:FindFirstChild("Stun")
 	if stun and (stun:IsA("NumberValue") or stun:IsA("IntValue")) and stun.Value ~= 0 then
 		stun.Value = 0
 	end
 
-	-- Disable force locks by setting MaxForce to zero instead of Destroying
 	for _, obj in ipairs(char:GetDescendants()) do
 		if obj:IsA("BodyVelocity") or obj:IsA("LinearVelocity") then
 			if obj.Velocity.Magnitude < 3 and obj.MaxForce.Magnitude > 1000 then
@@ -396,7 +476,6 @@ local function applyAntiStun()
 		end
 	end
 
-	-- Clear lock/stun attributes non-destructively
 	pcall(function()
 		for _, inst in ipairs({ char, hum, hrp }) do
 			for attr, val in pairs(inst:GetAttributes()) do
@@ -415,7 +494,6 @@ local function applyAntiStun()
 		end
 	end)
 
-	-- Restore movement controls
 	if hrp.Anchored then hrp.Anchored = false end
 	if hum.PlatformStand then hum.PlatformStand = false end
 	if hum.Sit then hum.Sit = false end
@@ -436,19 +514,8 @@ end
 
 RunService.Heartbeat:Connect(function()
 	if antiStunEnabled then pcall(applyAntiStun) end
-
-	if stickBehind and currentTarget and isValidTarget(currentTarget) then
-		local char = getChar()
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		local tHRP = currentTarget.Character:FindFirstChild("HumanoidRootPart")
-		if hrp and tHRP then
-			local behind = tHRP.Position - tHRP.CFrame.LookVector * STICK_DIST
-			hrp.CFrame = CFrame.new(behind, tHRP.Position)
-			hrp.AssemblyLinearVelocity = Vector3.zero
-		end
-	end
-
 	pcall(updateVisuals)
+	pcall(updateNameEsp)
 end)
 
 RunService.RenderStepped:Connect(function()
@@ -474,7 +541,6 @@ local function stopAutoKen()
 			OM:refresh()
 		end
 	end)
-	-- Send server packet to completely disable Observation Haki in-game
 	pcall(function()
 		ReplicatedStorage.Remotes.CommE:FireServer("Ken", false)
 	end)
@@ -570,12 +636,13 @@ task.spawn(function()
 	end
 end)
 
-local lockBtn, targetLabel
+local lockBtn, targetLabel, dropdownBtn, dropdownScroll
+local refreshPlayerDropdown -- Forward declaration
 
 local function updateTargetLabel()
 	if not targetLabel then return end
 	if currentTarget and isValidTarget(currentTarget) then
-		targetLabel.Text = "Target: " .. currentTarget.Name
+		targetLabel.Text = "Target: " .. currentTarget.DisplayName
 		targetLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
 	else
 		targetLabel.Text = "Target: none"
@@ -584,10 +651,9 @@ local function updateTargetLabel()
 end
 
 local function clearTarget(reason)
-	local name = currentTarget and currentTarget.Name or nil
+	local name = currentTarget and currentTarget.DisplayName or nil
 	currentTarget = nil
 	camLockOn = false
-	stickBehind = false
 	_G.AimMethod = false
 	destroyVisuals()
 	if lockBtn then
@@ -595,6 +661,7 @@ local function clearTarget(reason)
 		lockBtn.TextColor3 = Color3.fromRGB(120, 255, 140)
 	end
 	updateTargetLabel()
+	if refreshPlayerDropdown then refreshPlayerDropdown() end
 	if reason == "dead" and name then
 		notify("Target dead: " .. name)
 	end
@@ -620,6 +687,7 @@ local function selectTargetFOV()
 		ABmethod = "Nearest Aim"
 		MousePos = best.Character.HumanoidRootPart.Position
 		updateTargetLabel()
+		if refreshPlayerDropdown then refreshPlayerDropdown() end
 		print("[Target]", best.Name)
 	end
 end
@@ -633,6 +701,9 @@ task.spawn(function()
 	end
 end)
 
+-- ============================================================
+-- GOTO PLAYER KEYBIND (PAGEDOWN): TP IF <= 400 STUDS, ELSE TWEEN
+-- ============================================================
 UserInputService.InputBegan:Connect(function(input, gpe)
 	if input.KeyCode == Enum.KeyCode.R then
 		doSoruToTarget()
@@ -640,12 +711,28 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	end
 	if input.KeyCode == Enum.KeyCode.PageDown then
 		if not currentTarget or not isValidTarget(currentTarget) then
-			print("[Stick] No target")
+			notify("No target selected!")
+			print("[GotoPlayer] No target")
 			return
 		end
-		stickBehind = not stickBehind
-		notify(stickBehind and "Stick Behind: ON" or "Stick Behind: OFF")
-		print("[Stick]", stickBehind and "ON" or "OFF")
+		local char = getChar()
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		local tHRP = currentTarget.Character:FindFirstChild("HumanoidRootPart")
+		if hrp and tHRP then
+			local targetCF = CFrame.new(tHRP.Position - tHRP.CFrame.LookVector * STICK_DIST, tHRP.Position)
+			local dist = (tHRP.Position - hrp.Position).Magnitude
+			if dist <= 400 then
+				pcall(function() hrp.CFrame = targetCF end)
+				notify("Teleported to " .. currentTarget.DisplayName)
+				print("[GotoPlayer] TP (Dist: " .. math.floor(dist) .. ")")
+			else
+				notify("Tweening to " .. currentTarget.DisplayName)
+				print("[GotoPlayer] Tween (Dist: " .. math.floor(dist) .. ")")
+				local tweenTime = math.clamp(dist / 300, 0.5, 3.5)
+				local tween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {CFrame = targetCF})
+				tween:Play()
+			end
+		end
 		return
 	end
 	if gpe then return end
@@ -675,18 +762,9 @@ task.spawn(function()
 			continue
 		end
 		local seen = {}
-		for _, v in pairs(Players:GetPlayers()) do
-			if isValidTarget(v) then
-				local char = v.Character
-				local pos = char.HumanoidRootPart.Position
-				if v == currentTarget then
-					setHighlight(char, HIGHLIGHT_TARGET, 0.2)
-					seen[char] = true
-				elseif inFOV(pos) then
-					setHighlight(char, HIGHLIGHT_FOV, 0.75)
-					seen[char] = true
-				end
-			end
+		if currentTarget and isValidTarget(currentTarget) then
+			setHighlight(currentTarget.Character, HIGHLIGHT_TARGET, 0.2)
+			seen[currentTarget.Character] = true
 		end
 		for char in pairs(highlights) do
 			if not seen[char] then clearHighlight(char) end
@@ -719,7 +797,7 @@ local function makeDraggable(frame)
 end
 
 -- ============================================================
--- USER INTERFACE (TOP-LEFT POSITION + DRAGGABLE)
+-- USER INTERFACE (ALWAYS OPEN BY DEFAULT ON STARTUP)
 -- ============================================================
 local gui = Instance.new("ScreenGui")
 gui.Name = "CamLockUI"
@@ -743,7 +821,7 @@ setGuiParent()
 
 local panel = Instance.new("Frame")
 panel.Size = UDim2.new(0, 58, 0, 130)
-panel.Position = UDim2.new(0, 10, 0, 10) -- Moved to Top-Left Area
+panel.Position = UDim2.new(0, 10, 0, 10)
 panel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 panel.BackgroundTransparency = 0.25
 panel.BorderSizePixel = 0
@@ -853,10 +931,35 @@ lockBtn.TextColor3 = Color3.fromRGB(120, 255, 140)
 lockBtn.Font = Enum.Font.GothamBold
 lockBtn.TextSize = 12
 lockBtn.Text = "Cam Lock: OFF"
-lockBtn.Visible = false
+lockBtn.Visible = true -- Open by default
 lockBtn.Parent = gui
 Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 6)
 makeDraggable(lockBtn)
+
+-- Small Dot Button for Name ESP near Cam Lock
+local espDotBtn = Instance.new("TextButton")
+espDotBtn.Size = UDim2.new(0, 28, 0, 28)
+espDotBtn.Position = UDim2.new(0.5, 80, 0, 18)
+espDotBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80) -- Red when off by default
+espDotBtn.BorderSizePixel = 0
+espDotBtn.Text = "ESP"
+espDotBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+espDotBtn.Font = Enum.Font.GothamBold
+espDotBtn.TextSize = 10
+espDotBtn.Visible = true
+espDotBtn.Parent = gui
+Instance.new("UICorner", espDotBtn).CornerRadius = UDim.new(0, 6)
+makeDraggable(espDotBtn)
+
+espDotBtn.MouseButton1Click:Connect(function()
+	nameEspEnabled = not nameEspEnabled
+	if nameEspEnabled then
+		espDotBtn.BackgroundColor3 = Color3.fromRGB(80, 255, 120) -- Green when on
+	else
+		espDotBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80) -- Red when off
+		clearNameEsp()
+	end
+end)
 
 targetLabel = Instance.new("TextLabel")
 targetLabel.Size = UDim2.new(0, 150, 0, 18)
@@ -866,8 +969,112 @@ targetLabel.Text = "Target: none"
 targetLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
 targetLabel.Font = Enum.Font.GothamBold
 targetLabel.TextSize = 12
-targetLabel.Visible = false
+targetLabel.Visible = true -- Open by default
 targetLabel.Parent = gui
+
+-- ============================================================
+-- PLAYER DROPDOWN UI SETUP
+-- ============================================================
+dropdownBtn = Instance.new("TextButton")
+dropdownBtn.Size = UDim2.new(0, 150, 0, 24)
+dropdownBtn.Position = UDim2.new(0.5, -75, 0, 70)
+dropdownBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+dropdownBtn.BorderColor3 = Color3.fromRGB(60, 255, 100)
+dropdownBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+dropdownBtn.Font = Enum.Font.GothamBold
+dropdownBtn.TextSize = 11
+dropdownBtn.Text = "Select Target v"
+dropdownBtn.Visible = true -- Open by default
+dropdownBtn.Parent = gui
+Instance.new("UICorner", dropdownBtn).CornerRadius = UDim.new(0, 6)
+makeDraggable(dropdownBtn)
+
+dropdownScroll = Instance.new("ScrollingFrame")
+dropdownScroll.Size = UDim2.new(0, 150, 0, 110)
+dropdownScroll.Position = UDim2.new(0.5, -75, 0, 96)
+dropdownScroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+dropdownScroll.BackgroundTransparency = 0.2
+dropdownScroll.BorderSizePixel = 0
+dropdownScroll.Visible = false
+dropdownScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+dropdownScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+dropdownScroll.ScrollBarThickness = 4
+dropdownScroll.Parent = gui
+Instance.new("UICorner", dropdownScroll).CornerRadius = UDim.new(0, 6)
+
+local scrollLayout = Instance.new("UIListLayout")
+scrollLayout.FillDirection = Enum.FillDirection.Vertical
+scrollLayout.SortOrder = Enum.SortOrder.LayoutOrder
+scrollLayout.Padding = UDim.new(0, 3)
+scrollLayout.Parent = dropdownScroll
+
+local scrollPad = Instance.new("UIPadding")
+scrollPad.PaddingTop = UDim.new(0, 4)
+scrollPad.PaddingBottom = UDim.new(0, 4)
+scrollPad.PaddingLeft = UDim.new(0, 4)
+scrollPad.PaddingRight = UDim.new(0, 4)
+scrollPad.Parent = dropdownScroll
+
+local dropdownOpen = false
+dropdownBtn.MouseButton1Click:Connect(function()
+	dropdownOpen = not dropdownOpen
+	dropdownScroll.Visible = dropdownOpen
+end)
+
+refreshPlayerDropdown = function()
+	for _, child in ipairs(dropdownScroll:GetChildren()) do
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
+	end
+
+	for _, v in ipairs(Players:GetPlayers()) do
+		if v ~= plr then
+			local pBtn = Instance.new("TextButton")
+			pBtn.Size = UDim2.new(1, 0, 0, 26) -- Slightly taller for larger text
+			pBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+			pBtn.BorderSizePixel = 0
+			pBtn.Font = Enum.Font.GothamBold
+			pBtn.TextSize = 12 -- Larger dropdown text size
+			pBtn.RichText = true
+			
+			-- Display name bright yellow, username green in brackets
+			pBtn.Text = '<font color="rgb(255,255,0)">' .. v.DisplayName .. '</font> <font color="rgb(80,255,120)">(@' .. v.Name .. ')</font>'
+			pBtn.TextTruncate = Enum.TextTruncate.AtEnd
+
+			pBtn.Parent = dropdownScroll
+			Instance.new("UICorner", pBtn).CornerRadius = UDim.new(0, 4)
+
+			pBtn.MouseButton1Click:Connect(function()
+				if isValidTarget(v) then
+					currentTarget = v
+					_G.AimMethod = true
+					camLockOn = true
+					lockBtn.Text = "Cam Lock: " .. v.DisplayName
+					lockBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+					updateTargetLabel()
+					dropdownOpen = false
+					dropdownScroll.Visible = false
+					refreshPlayerDropdown()
+				else
+					notify("Target is invalid or dead!")
+				end
+			end)
+		end
+	end
+end
+
+Players.PlayerAdded:Connect(refreshPlayerDropdown)
+Players.PlayerRemoving:Connect(refreshPlayerDropdown)
+
+task.spawn(function()
+	while true do
+		task.wait(3)
+		if dropdownScroll.Visible then
+			refreshPlayerDropdown()
+		end
+	end
+end)
 
 local function refreshMasterUI()
 	masterBtn.Text = silentAimEnabled and "ON" or "OFF"
@@ -910,11 +1117,21 @@ refreshSoruUI()
 refreshKenUI()
 setPanelHidden(true)
 updateTargetLabel()
+refreshPlayerDropdown()
 
+-- Green square button toggles Cam Lock elements visibility
 openBtn.MouseButton1Click:Connect(function()
-	lockBtn.Visible = not lockBtn.Visible
-	targetLabel.Visible = lockBtn.Visible
+	local newState = not lockBtn.Visible
+	lockBtn.Visible = newState
+	espDotBtn.Visible = newState
+	targetLabel.Visible = newState
+	dropdownBtn.Visible = newState
+	if not newState then
+		dropdownOpen = false
+		dropdownScroll.Visible = false
+	end
 	updateTargetLabel()
+	refreshPlayerDropdown()
 end)
 
 masterBtn.MouseButton1Click:Connect(function()
@@ -960,6 +1177,7 @@ lockBtn.MouseButton1Click:Connect(function()
 		camLockOn = false
 		lockBtn.Text = "Cam Lock: OFF"
 		lockBtn.TextColor3 = Color3.fromRGB(120, 255, 140)
+		refreshPlayerDropdown()
 	else
 		if not currentTarget or not isValidTarget(currentTarget) then
 			selectTargetFOV()
@@ -967,9 +1185,10 @@ lockBtn.MouseButton1Click:Connect(function()
 		if currentTarget and isValidTarget(currentTarget) then
 			camLockOn = true
 			_G.AimMethod = true
-			lockBtn.Text = "Cam Lock: " .. currentTarget.Name
+			lockBtn.Text = "Cam Lock: " .. currentTarget.DisplayName
 			lockBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
 			updateTargetLabel()
+			refreshPlayerDropdown()
 		end
 	end
 end)
