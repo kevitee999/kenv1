@@ -216,8 +216,7 @@ local function SaveConfig()
 				jump500Toggle = jump500Toggle,
 				dashToggle = dashToggle,
 				dashMultiplier = dashMultiplier,
-				fastFallToggle = fastFallToggle,
-				fastAttack = fastAttack
+				fastFallToggle = fastFallToggle
 			}))
 		end)
 	end
@@ -238,7 +237,6 @@ local function LoadConfig()
 				dashToggle = d.dashToggle or false
 				dashMultiplier = d.dashMultiplier or 1.5
 				fastFallToggle = d.fastFallToggle or false
-				fastAttack = d.fastAttack or false
 			end
 		end)
 	end
@@ -987,6 +985,8 @@ local DashDropdownBtn = createButton("Dash Mult: " .. tostring(dashMultiplier) .
 local FastAttackBtn = createButton("Fast Attack: " .. (fastAttack and "ON" or "OFF"), MainFrame)
 if fastAttack then FastAttackBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
 
+local PlayerESPBtn = createButton("Player ESP: OFF", MainFrame)
+
 local OptionsFrame = Instance.new("Frame")
 OptionsFrame.Size = UDim2.new(1, 0, 0, 130)
 OptionsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
@@ -1273,7 +1273,6 @@ FastAttackBtn.MouseButton1Click:Connect(function()
 	else
 		StopFastAttack()
 	end
-	SaveConfig()
 end)
 
 if fastAttack then
@@ -1699,6 +1698,135 @@ task.spawn(function()
 		if raidESPEnabled and raidESPFolder then
 			CreateRaidESP()
 		end
+	end
+end)
+
+-- ==========================
+-- PLAYER ESP
+-- ==========================
+local playerESPEnabled = false
+local playerESPFolder = nil
+local activePlayerESPs = {}
+
+local function ClearPlayerESP()
+	if playerESPFolder then
+		playerESPFolder:Destroy()
+		playerESPFolder = nil
+	end
+	activePlayerESPs = {}
+end
+
+local function UpdatePlayerESP()
+	if not playerESPEnabled then return end
+	if not playerESPFolder or not playerESPFolder.Parent then
+		playerESPFolder = Instance.new("Folder")
+		playerESPFolder.Name = "PlayerESPFolder"
+		playerESPFolder.Parent = workspace
+	end
+
+	local currentFound = {}
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			local char = player.Character
+			local hrp = char:FindFirstChild("HumanoidRootPart")
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			
+			if hrp and hum and hum.Health > 0 then
+				currentFound[player] = true
+				
+				local espData = activePlayerESPs[player]
+				if not espData then
+					local part = Instance.new("Part")
+					part.Size = Vector3.new(1, 1, 1)
+					part.Position = hrp.Position
+					part.Anchored = true
+					part.CanCollide = false
+					part.Transparency = 1
+					part.Parent = playerESPFolder
+					
+					local billboard = Instance.new("BillboardGui")
+					billboard.Size = UDim2.new(0, 100, 0, 40)
+					billboard.StudsOffset = Vector3.new(0, 3, 0)
+					billboard.AlwaysOnTop = true
+					billboard.Parent = part
+					
+					local nameLabel = Instance.new("TextLabel")
+					nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+					nameLabel.Position = UDim2.new(0, 0, 0, 0)
+					nameLabel.BackgroundTransparency = 1
+					nameLabel.TextStrokeTransparency = 0.5
+					nameLabel.TextStrokeColor3 = Color3.new(0,0,0)
+					nameLabel.Font = Enum.Font.GothamBold
+					nameLabel.TextSize = 14
+					nameLabel.Parent = billboard
+					
+					local bgBar = Instance.new("Frame")
+					bgBar.Size = UDim2.new(1, 0, 0.15, 0)
+					bgBar.Position = UDim2.new(0, 0, 0.6, 0)
+					bgBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+					bgBar.BorderSizePixel = 0
+					bgBar.Parent = billboard
+					
+					local hpBar = Instance.new("Frame")
+					hpBar.Size = UDim2.new(1, 0, 1, 0)
+					hpBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+					hpBar.BorderSizePixel = 0
+					hpBar.Parent = bgBar
+					
+					espData = {part = part, nameLabel = nameLabel, hpBar = hpBar}
+					activePlayerESPs[player] = espData
+				end
+				
+				-- Update Position
+				espData.part.Position = hrp.Position
+				
+				-- Get Level
+				local level = "?"
+				pcall(function()
+					if player:FindFirstChild("Data") and player.Data:FindFirstChild("Level") then
+						level = tostring(player.Data.Level.Value)
+					end
+				end)
+				
+				espData.nameLabel.Text = "Lv. " .. level
+				espData.nameLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+				
+				-- Get Health and update bar
+				local maxHp = hum.MaxHealth
+				local hp = hum.Health
+				local pct = 0
+				if maxHp > 0 then
+					pct = math.clamp(hp / maxHp, 0, 1)
+				end
+				
+				espData.hpBar.Size = UDim2.new(pct, 0, 1, 0)
+				espData.hpBar.BackgroundColor3 = Color3.new(1, 0, 0):Lerp(Color3.new(0, 1, 0), pct)
+			end
+		end
+	end
+	
+	for player, espData in pairs(activePlayerESPs) do
+		if not currentFound[player] then
+			if espData.part then espData.part:Destroy() end
+			activePlayerESPs[player] = nil
+		end
+	end
+end
+
+PlayerESPBtn.MouseButton1Click:Connect(function()
+	playerESPEnabled = not playerESPEnabled
+	PlayerESPBtn.Text = "Player ESP: " .. (playerESPEnabled and "ON" or "OFF")
+	PlayerESPBtn.TextColor3 = playerESPEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	
+	if not playerESPEnabled then
+		ClearPlayerESP()
+	end
+end)
+
+task.spawn(function()
+	while task.wait(0.1) do
+		UpdatePlayerESP()
 	end
 end)
 
