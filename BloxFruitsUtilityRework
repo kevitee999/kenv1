@@ -28,6 +28,12 @@ local dashMultiplier = 1.5
 local fastFallToggle = false
 local fastAttack = false
 
+-- Global & State Variables for Kill Aura & Anti-Stun
+_G.KillAura = false
+local manualKillAuraToggle = false
+local islandAutoKillAura = false
+local antiStunEnabled = false
+
 local lastSafeJump = 0
 local configFile = "TinyGuiSettings.json"
 
@@ -287,6 +293,9 @@ PingBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
 PingBtn.TextColor3 = Color3.fromRGB(80, 255, 120)
 PingBtn.TextSize = 13
 PingBtn.Font = Enum.Font.GothamBold
+PingBtn.RichText = true
+PingBtn.TextStrokeTransparency = 0.8
+PingBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 PingBtn.Text = "Ping: 0"
 PingBtn.Parent = ScreenGui
 
@@ -299,6 +308,9 @@ SpectateBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
 SpectateBtn.TextColor3 = Color3.fromRGB(255, 235, 50)
 SpectateBtn.TextSize = 13
 SpectateBtn.Font = Enum.Font.GothamBold
+SpectateBtn.RichText = true
+SpectateBtn.TextStrokeTransparency = 0.8
+SpectateBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 SpectateBtn.Text = "Spectate ▼"
 SpectateBtn.Parent = ScreenGui
 
@@ -328,6 +340,51 @@ MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
 
 -- ==========================
+-- PIRATES & MARINES BUTTONS (RIGHT ABOVE SEA BUTTON)
+-- ==========================
+local PirateBtn = Instance.new("TextButton")
+PirateBtn.Size = UDim2.new(0, 36, 0, 22)
+PirateBtn.Position = UDim2.new(0, 135, 0, 42)
+PirateBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+PirateBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
+PirateBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+PirateBtn.TextSize = 10
+PirateBtn.Font = Enum.Font.GothamBold
+PirateBtn.RichText = true
+PirateBtn.TextStrokeTransparency = 0.8
+PirateBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+PirateBtn.Text = "Pirate"
+PirateBtn.Visible = false
+PirateBtn.Parent = ScreenGui
+
+local MarineBtn = Instance.new("TextButton")
+MarineBtn.Size = UDim2.new(0, 36, 0, 22)
+MarineBtn.Position = UDim2.new(0, 174, 0, 42)
+MarineBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MarineBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
+MarineBtn.TextColor3 = Color3.fromRGB(100, 150, 255)
+MarineBtn.TextSize = 10
+MarineBtn.Font = Enum.Font.GothamBold
+MarineBtn.RichText = true
+MarineBtn.TextStrokeTransparency = 0.8
+MarineBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+MarineBtn.Text = "Marine"
+MarineBtn.Visible = false
+MarineBtn.Parent = ScreenGui
+
+PirateBtn.MouseButton1Click:Connect(function()
+	pcall(function()
+		ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Pirates")
+	end)
+end)
+
+MarineBtn.MouseButton1Click:Connect(function()
+	pcall(function()
+		ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Marines")
+	end)
+end)
+
+-- ==========================
 -- FRUITS ESP (0 LAG & EXACT MATCH) + TWEEN
 -- ==========================
 local SeaBtn = Instance.new("TextButton")
@@ -338,6 +395,9 @@ SeaBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
 SeaBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 SeaBtn.TextSize = 12
 SeaBtn.Font = Enum.Font.GothamBold
+SeaBtn.RichText = true
+SeaBtn.TextStrokeTransparency = 0.8
+SeaBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 SeaBtn.Text = "Sea"
 SeaBtn.Visible = false
 SeaBtn.Parent = ScreenGui
@@ -354,6 +414,9 @@ FruitESPBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
 FruitESPBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 FruitESPBtn.TextSize = 12
 FruitESPBtn.Font = Enum.Font.GothamBold
+FruitESPBtn.RichText = true
+FruitESPBtn.TextStrokeTransparency = 0.8
+FruitESPBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 FruitESPBtn.Text = "Fruits ESP"
 FruitESPBtn.Visible = false
 FruitESPBtn.Parent = ScreenGui
@@ -366,6 +429,9 @@ FruitDropdownBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
 FruitDropdownBtn.TextColor3 = Color3.fromRGB(255, 235, 50)
 FruitDropdownBtn.TextSize = 14
 FruitDropdownBtn.Font = Enum.Font.GothamBold
+FruitDropdownBtn.RichText = true
+FruitDropdownBtn.TextStrokeTransparency = 0.8
+FruitDropdownBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 FruitDropdownBtn.Text = "▶"
 FruitDropdownBtn.Visible = false
 FruitDropdownBtn.Parent = ScreenGui
@@ -420,6 +486,9 @@ local function RefreshFruitList()
 				btn.TextColor3 = Color3.fromRGB(255, 255, 180)
 				btn.TextSize = 11
 				btn.Font = Enum.Font.GothamBold
+				btn.RichText = true
+				btn.TextStrokeTransparency = 0.8
+				btn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 				btn.Text = "🍎 " .. fruitModel.Name .. " ➔"
 				btn.Parent = FruitFrame
 
@@ -500,6 +569,7 @@ local function UpdateFruitESP()
 				end
 
 				label.Font = Enum.Font.GothamBold
+				label.RichText = true
 				label.Parent = billboard
 
 				activeFruitESPs[child] = part
@@ -585,6 +655,9 @@ GravityBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
 GravityBtn.TextColor3 = fastFallToggle and Color3.fromRGB(255, 235, 50) or Color3.fromRGB(200, 200, 200)
 GravityBtn.TextSize = 14
 GravityBtn.Font = Enum.Font.GothamBold
+GravityBtn.RichText = true
+GravityBtn.TextStrokeTransparency = 0.8
+GravityBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 GravityBtn.Text = "gravity\n" .. (fastFallToggle and "ON" or "OFF")
 GravityBtn.Visible = false
 GravityBtn.Parent = ScreenGui
@@ -603,6 +676,9 @@ IslandESPBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
 IslandESPBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 IslandESPBtn.TextSize = 12
 IslandESPBtn.Font = Enum.Font.GothamBold
+IslandESPBtn.RichText = true
+IslandESPBtn.TextStrokeTransparency = 0.8
+IslandESPBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 IslandESPBtn.Text = "Island ESP"
 IslandESPBtn.Visible = false
 IslandESPBtn.Parent = ScreenGui
@@ -615,6 +691,9 @@ IslandDropdownBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
 IslandDropdownBtn.TextColor3 = Color3.fromRGB(255, 235, 50)
 IslandDropdownBtn.TextSize = 12
 IslandDropdownBtn.Font = Enum.Font.GothamBold
+IslandDropdownBtn.RichText = true
+IslandDropdownBtn.TextStrokeTransparency = 0.8
+IslandDropdownBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 IslandDropdownBtn.Text = "Islands ▼"
 IslandDropdownBtn.Visible = false
 IslandDropdownBtn.Parent = ScreenGui
@@ -672,6 +751,7 @@ local function CreateIslandESP()
 		label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 		label.TextSize = 16
 		label.Font = Enum.Font.GothamBold
+		label.RichText = true
 		label.Parent = billboard
 	end
 end
@@ -695,6 +775,9 @@ local function RefreshIslandList()
 		btn.TextColor3 = Color3.fromRGB(255, 235, 50)
 		btn.TextSize = 12
 		btn.Font = Enum.Font.GothamBold
+		btn.RichText = true
+		btn.TextStrokeTransparency = 0.8
+		btn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 		btn.Text = data.Name
 		btn.Parent = IslandFrame
 
@@ -788,6 +871,7 @@ local function RefreshSpectateList()
 			btn.TextColor3 = Color3.fromRGB(255, 255, 180)
 			btn.TextSize = 13
 			btn.Font = Enum.Font.GothamBold
+			btn.RichText = true
 			btn.TextStrokeTransparency = 0.6
 			btn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 			btn.Text = player.DisplayName
@@ -864,6 +948,8 @@ PingBtn.InputBegan:Connect(function(input)
 				c:Disconnect()
 				if movedDistance < 6 then
 					MainFrame.Visible = not MainFrame.Visible
+					PirateBtn.Visible = MainFrame.Visible
+					MarineBtn.Visible = MainFrame.Visible
 					SeaBtn.Visible = MainFrame.Visible
 					GravityBtn.Visible = MainFrame.Visible
 					FruitESPBtn.Visible = MainFrame.Visible
@@ -899,6 +985,8 @@ UserInputService.InputChanged:Connect(function(input)
 		SpectateBtn.Position = UDim2.new(0, newX, 0, newY + 32)
 		SpectateFrame.Position = UDim2.new(0, newX, 0, newY + 64)
 		MainFrame.Position = UDim2.new(0, newX, 0, newY + 64)
+		PirateBtn.Position = UDim2.new(0, newX + 115, 0, newY + 22)
+		MarineBtn.Position = UDim2.new(0, newX + 154, 0, newY + 22)
 		SeaBtn.Position = UDim2.new(0, newX + 115, 0, newY + 48)
 		FruitESPBtn.Position = UDim2.new(0, newX + 115, 0, newY + 80)
 		FruitDropdownBtn.Position = UDim2.new(0, newX + 192, 0, newY + 80)
@@ -934,8 +1022,11 @@ local function createButton(text, parent)
 	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 	btn.BorderColor3 = Color3.fromRGB(60, 60, 60)
 	btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-	btn.TextSize = 10
-	btn.Font = Enum.Font.Code
+	btn.TextSize = 11
+	btn.Font = Enum.Font.GothamBold
+	btn.RichText = true
+	btn.TextStrokeTransparency = 0.8
+	btn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	btn.Text = text
 	btn.Parent = parent
 	return btn
@@ -948,8 +1039,11 @@ SpeedBox.Size = UDim2.new(1, 0, 0, 18)
 SpeedBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 SpeedBox.BorderColor3 = Color3.fromRGB(60, 60, 60)
 SpeedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-SpeedBox.TextSize = 10
-SpeedBox.Font = Enum.Font.Code
+SpeedBox.TextSize = 11
+SpeedBox.Font = Enum.Font.GothamBold
+SpeedBox.RichText = true
+SpeedBox.TextStrokeTransparency = 0.8
+SpeedBox.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 SpeedBox.Text = "Fly Spd: " .. tostring(flySpeed)
 SpeedBox.Parent = MainFrame
 
@@ -969,8 +1063,11 @@ SafeModeHpBox.Size = UDim2.new(1, 0, 0, 18)
 SafeModeHpBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 SafeModeHpBox.BorderColor3 = Color3.fromRGB(60, 60, 60)
 SafeModeHpBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-SafeModeHpBox.TextSize = 10
-SafeModeHpBox.Font = Enum.Font.Code
+SafeModeHpBox.TextSize = 11
+SafeModeHpBox.Font = Enum.Font.GothamBold
+SafeModeHpBox.RichText = true
+SafeModeHpBox.TextStrokeTransparency = 0.8
+SafeModeHpBox.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 SafeModeHpBox.Text = "Safe HP: " .. tostring(safeModeHp)
 SafeModeHpBox.Parent = MainFrame
 
@@ -986,6 +1083,30 @@ local FastAttackBtn = createButton("Fast Attack: " .. (fastAttack and "ON" or "O
 if fastAttack then FastAttackBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
 
 local PlayerESPBtn = createButton("Player ESP: OFF", MainFrame)
+
+local KillAuraBtn = createButton("Kill Aura: OFF", MainFrame)
+local AntiStunBtn = createButton("Anti Stun: OFF", MainFrame)
+local AutoBusoBtn = createButton("Auto Buso: OFF", MainFrame)
+
+local autoBusoEnabled = false
+AutoBusoBtn.MouseButton1Click:Connect(function()
+	autoBusoEnabled = not autoBusoEnabled
+	AutoBusoBtn.Text = "Auto Buso: " .. (autoBusoEnabled and "ON" or "OFF")
+	AutoBusoBtn.TextColor3 = autoBusoEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+end)
+
+task.spawn(function()
+	while task.wait(1) do
+		if autoBusoEnabled then
+			pcall(function()
+				local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+				if Character and not Character:FindFirstChild("HasBuso") then
+					ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
+				end
+			end)
+		end
+	end
+end)
 
 local OptionsFrame = Instance.new("Frame")
 OptionsFrame.Size = UDim2.new(1, 0, 0, 130)
@@ -1007,8 +1128,11 @@ for _, mult in ipairs(multipliers) do
 	opt.BorderColor3 = Color3.fromRGB(60, 60, 60)
 	opt.Text = tostring(mult) .. "x"
 	opt.TextColor3 = Color3.fromRGB(200, 200, 200)
-	opt.TextSize = 10
-	opt.Font = Enum.Font.Code
+	opt.TextSize = 11
+	opt.Font = Enum.Font.GothamBold
+	opt.RichText = true
+	opt.TextStrokeTransparency = 0.8
+	opt.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	opt.Parent = OptionsFrame
 
 	opt.MouseButton1Click:Connect(function()
@@ -1021,6 +1145,219 @@ end
 
 DashDropdownBtn.MouseButton1Click:Connect(function()
 	OptionsFrame.Visible = not OptionsFrame.Visible
+end)
+
+-- ==========================
+-- KILL AURA LOGIC & AUTO TOGGLE (RAID ISLAND 4 & 5)
+-- ==========================
+local function updateKillAuraUI()
+	if _G.KillAura then
+		KillAuraBtn.Text = "Kill Aura: ON"
+		KillAuraBtn.TextColor3 = Color3.fromRGB(100, 255, 100)
+	else
+		KillAuraBtn.Text = "Kill Aura: OFF"
+		KillAuraBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+	end
+end
+
+KillAuraBtn.MouseButton1Click:Connect(function()
+	_G.KillAura = not _G.KillAura
+	manualKillAuraToggle = _G.KillAura
+	updateKillAuraUI()
+end)
+
+local KillAuraRange = 1000
+local KillAuraDelay = 2
+
+task.spawn(function()
+	while task.wait(KillAuraDelay) do
+		if _G.KillAura then
+			pcall(function()
+				local char = LocalPlayer.Character
+				local hrp = char and char:FindFirstChild("HumanoidRootPart")
+				if not hrp then return end
+
+				if sethiddenproperty then
+					pcall(function() sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge) end)
+				end
+
+				local enemiesFolder = workspace:FindFirstChild("Enemies")
+				if enemiesFolder then
+					for _, enemy in pairs(enemiesFolder:GetChildren()) do
+						if enemy:FindFirstChild("Humanoid") and enemy:FindFirstChild("HumanoidRootPart") then
+							local dist = (enemy.HumanoidRootPart.Position - hrp.Position).Magnitude
+							if dist <= KillAuraRange and enemy.Humanoid.Health > 0 then
+								enemy.Humanoid.Health = 0
+								enemy.HumanoidRootPart.CanCollide = false
+								enemy:BreakJoints()
+							end
+						end
+					end
+				end
+			end)
+		end
+	end
+end)
+
+task.spawn(function()
+	while task.wait(1) do
+		pcall(function()
+			local char = LocalPlayer.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if not hrp then return end
+
+			local onIsland4or5 = false
+			local map = workspace:FindFirstChild("Map")
+			local raidMap = map and map:FindFirstChild("RaidMap")
+
+			if raidMap then
+				for _, child in pairs(raidMap:GetChildren()) do
+					local nameLower = string.lower(child.Name)
+					if string.find(nameLower, "raidisland4") or string.find(nameLower, "raidisland5") or string.find(nameLower, "island4") or string.find(nameLower, "island5") or string.find(nameLower, "island 4") or string.find(nameLower, "island 5") then
+						local targetPart = child:IsA("Model") and (child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart", true)) or child
+						if targetPart and targetPart:IsA("BasePart") then
+							local dist = (targetPart.Position - hrp.Position).Magnitude
+							if dist <= 1200 then
+								onIsland4or5 = true
+								break
+							end
+						end
+					end
+				end
+			end
+
+			if onIsland4or5 then
+				if not islandAutoKillAura then
+					islandAutoKillAura = true
+					_G.KillAura = true
+					updateKillAuraUI()
+				end
+			else
+				if islandAutoKillAura then
+					islandAutoKillAura = false
+					if not manualKillAuraToggle then
+						_G.KillAura = false
+						updateKillAuraUI()
+					end
+				end
+			end
+		end)
+	end
+end)
+
+-- ==========================
+-- ANTI STUN LOGIC
+-- ==========================
+AntiStunBtn.MouseButton1Click:Connect(function()
+	antiStunEnabled = not antiStunEnabled
+	AntiStunBtn.Text = "Anti Stun: " .. (antiStunEnabled and "ON" or "OFF")
+	AntiStunBtn.TextColor3 = antiStunEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+end)
+
+local skillHeld = {
+	[Enum.KeyCode.Z] = false,
+	[Enum.KeyCode.X] = false,
+	[Enum.KeyCode.C] = false,
+	[Enum.KeyCode.V] = false,
+}
+local ownMoveUntil = 0
+
+local function isUsingOwnMove()
+	if tick() < ownMoveUntil then return true end
+	for _, down in pairs(skillHeld) do
+		if down then return true end
+	end
+	return false
+end
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+	if skillHeld[input.KeyCode] ~= nil then
+		skillHeld[input.KeyCode] = true
+		ownMoveUntil = tick() + 2.5
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gpe)
+	if skillHeld[input.KeyCode] ~= nil then
+		skillHeld[input.KeyCode] = false
+		ownMoveUntil = tick() + 0.8
+	end
+end)
+
+local function getChar()
+	return LocalPlayer.Character
+end
+local baseWalkSpeed = 16
+
+local function applyAntiStun()
+	if not antiStunEnabled then return end
+	if isUsingOwnMove() then return end
+
+	local char = getChar()
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hum or not hrp or hum.Health <= 0 then return end
+
+	local stun = char:FindFirstChild("Stun") or hrp:FindFirstChild("Stun")
+	if stun and (stun:IsA("NumberValue") or stun:IsA("IntValue")) and stun.Value ~= 0 then
+		stun.Value = 0
+	end
+
+	for _, obj in ipairs(char:GetDescendants()) do
+		if obj:IsA("BodyVelocity") or obj:IsA("LinearVelocity") then
+			if obj.Velocity.Magnitude < 3 and obj.MaxForce.Magnitude > 1000 then
+				pcall(function() obj.MaxForce = Vector3.zero end)
+			end
+		elseif obj:IsA("BodyPosition") or obj:IsA("AlignPosition") then
+			if obj:IsA("BodyPosition") then
+				pcall(function() obj.MaxForce = Vector3.zero end)
+			end
+		end
+	end
+
+	pcall(function()
+		for _, inst in ipairs({ char, hum, hrp }) do
+			for attr, val in pairs(inst:GetAttributes()) do
+				local n = string.lower(tostring(attr))
+				if n:find("stun") or n:find("busy") or n:find("freeze") or n:find("nomove") then
+					if typeof(val) == "boolean" and val == true then
+						inst:SetAttribute(attr, false)
+					elseif typeof(val) == "number" and val > 0 then
+						inst:SetAttribute(attr, 0)
+					end
+				end
+				if n == "canmove" or n == "canwalk" then
+					inst:SetAttribute(attr, true)
+				end
+			end
+		end
+	end)
+
+	if hrp.Anchored then hrp.Anchored = false end
+	if hum.PlatformStand then hum.PlatformStand = false end
+	if hum.Sit then hum.Sit = false end
+	hum.AutoRotate = true
+
+	if hum.WalkSpeed < 12 then
+		hum.WalkSpeed = math.max(baseWalkSpeed, 16)
+	end
+
+	local st = hum:GetState()
+	if st == Enum.HumanoidStateType.Physics
+		or st == Enum.HumanoidStateType.Ragdoll
+		or st == Enum.HumanoidStateType.FallingDown
+		or st == Enum.HumanoidStateType.PlatformStanding then
+		pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
+	end
+end
+
+RunService.Heartbeat:Connect(function()
+	if antiStunEnabled then pcall(applyAntiStun) end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if antiStunEnabled then pcall(applyAntiStun) end
 end)
 
 -- ==========================
@@ -1358,7 +1695,7 @@ RunService.Heartbeat:Connect(function()
 	if safeModeTriggered then
 		noclip = true
 	else
-		noclip = flying or (activeTweenConnection ~= nil)
+		noclip = flying or (activeTweenConnection ~= nil) or raidFloatEnabled
 	end
 
 	if not flying and hum and hrp then
@@ -1520,20 +1857,20 @@ RunService.Heartbeat:Connect(function()
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	if not hrp then return end
 
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CanCollide = false
+		end
+	end
+
 	local npc = GetClosestRaidNPC()
 
 	if npc then
 		local eHrp = npc:FindFirstChild("HumanoidRootPart") or npc.PrimaryPart
 		if eHrp then
-			hrp.AssemblyLinearVelocity = Vector3.zero
-			hrp.AssemblyAngularVelocity = Vector3.zero
-
-			for _, part in ipairs(char:GetDescendants()) do
-				if part:IsA("BasePart") then
-					part.CanCollide = false
-				end
-			end
-
 			local targetPos = eHrp.Position + Vector3.new(0, 55, 0)
 			hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(targetPos, eHrp.Position), 0.2)
 		end
@@ -1617,6 +1954,7 @@ local function CreateRaidESP()
 					label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 					label.TextSize = 14
 					label.Font = Enum.Font.GothamBold
+					label.RichText = true
 					label.Parent = billboard
 				end
 			end
@@ -1758,6 +2096,7 @@ local function UpdatePlayerESP()
 					nameLabel.TextStrokeTransparency = 0.5
 					nameLabel.TextStrokeColor3 = Color3.new(0,0,0)
 					nameLabel.Font = Enum.Font.GothamBold
+					nameLabel.RichText = true
 					nameLabel.TextSize = 14
 					nameLabel.Parent = billboard
 					
