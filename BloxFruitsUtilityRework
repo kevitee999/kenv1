@@ -1833,4 +1833,14 @@ end)
 --Full moon status till got kit lamp
 loadstring(game:HttpGet('https://raw.githubusercontent.com/kevitee999/kenv1/refs/heads/main/FMaura'))()
 
+--PVP
+task.delay(6, function()
+    local success, err = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/kevitee999/kenv1/refs/heads/main/pvblo"))()
+    end)
+    if not success then
+        warn("Failed to load pvblo script: " .. tostring(err))
+    end
+end)
+
 print("might be this! added sea")
