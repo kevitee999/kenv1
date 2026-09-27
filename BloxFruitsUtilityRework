@@ -1845,7 +1845,7 @@ task.delay(6, function()
     if not success then
         warn("FAILED TO LOAD: " .. tostring(err))
     else
-        print("pvblo loaded successfully!")
+        print("pvblo loaded successfullyy!")
     end
 end)
 
