@@ -28,11 +28,20 @@ local dashMultiplier = 1.5
 local fastFallToggle = false
 local fastAttack = false
 
+-- Extra Config Variables (Moved up for saving/loading)
+local autoBusoEnabled = false
+local antiStunEnabled = false
+local fruitESPEnabled = false
+local islandESPEnabled = false
+local raidESPEnabled = false
+local raidFloatEnabled = false
+local autoNextIslandEnabled = false
+local playerESPEnabled = false
+
 -- Global & State Variables for Kill Aura & Anti-Stun
 _G.KillAura = false
 local manualKillAuraToggle = false
 local islandAutoKillAura = false
-local antiStunEnabled = false
 
 local lastSafeJump = 0
 local configFile = "TinyGuiSettings.json"
@@ -132,12 +141,10 @@ local function StartCustomTween(targetPos, targetName, onComplete)
 end
 
 -- Island ESP + Tween
-local islandESPEnabled = false
 local islandESPFolder = nil
 local islandButtons = {}
 
 -- Fruit ESP + Tween
-local fruitESPEnabled = false
 local fruitESPFolder = nil
 local activeFruitESPs = {}
 local fruitButtons = {}
@@ -222,7 +229,16 @@ local function SaveConfig()
 				jump500Toggle = jump500Toggle,
 				dashToggle = dashToggle,
 				dashMultiplier = dashMultiplier,
-				fastFallToggle = fastFallToggle
+				fastFallToggle = fastFallToggle,
+				infSoru = infSoru,
+				autoBusoEnabled = autoBusoEnabled,
+				antiStunEnabled = antiStunEnabled,
+				fruitESPEnabled = fruitESPEnabled,
+				islandESPEnabled = islandESPEnabled,
+				raidESPEnabled = raidESPEnabled,
+				raidFloatEnabled = raidFloatEnabled,
+				autoNextIslandEnabled = autoNextIslandEnabled,
+				playerESPEnabled = playerESPEnabled
 			}))
 		end)
 	end
@@ -243,6 +259,15 @@ local function LoadConfig()
 				dashToggle = d.dashToggle or false
 				dashMultiplier = d.dashMultiplier or 1.5
 				fastFallToggle = d.fastFallToggle or false
+				infSoru = d.infSoru or false
+				autoBusoEnabled = d.autoBusoEnabled or false
+				antiStunEnabled = d.antiStunEnabled or false
+				fruitESPEnabled = d.fruitESPEnabled or false
+				islandESPEnabled = d.islandESPEnabled or false
+				raidESPEnabled = d.raidESPEnabled or false
+				raidFloatEnabled = d.raidFloatEnabled or false
+				autoNextIslandEnabled = d.autoNextIslandEnabled or false
+				playerESPEnabled = d.playerESPEnabled or false
 			end
 		end)
 	end
@@ -411,13 +436,13 @@ FruitESPBtn.Size = UDim2.new(0, 75, 0, 28)
 FruitESPBtn.Position = UDim2.new(0, 135, 0, 100)
 FruitESPBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 FruitESPBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
-FruitESPBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 FruitESPBtn.TextSize = 12
 FruitESPBtn.Font = Enum.Font.GothamBold
 FruitESPBtn.RichText = true
 FruitESPBtn.TextStrokeTransparency = 0.8
 FruitESPBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-FruitESPBtn.Text = "Fruits ESP"
+FruitESPBtn.Text = fruitESPEnabled and "Fruits ESP ON" or "Fruits ESP"
+FruitESPBtn.TextColor3 = fruitESPEnabled and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(200, 200, 200)
 FruitESPBtn.Visible = false
 FruitESPBtn.Parent = ScreenGui
 
@@ -619,6 +644,7 @@ FruitESPBtn.MouseButton1Click:Connect(function()
 	fruitESPEnabled = not fruitESPEnabled
 	FruitESPBtn.Text = fruitESPEnabled and "Fruits ESP ON" or "Fruits ESP"
 	FruitESPBtn.TextColor3 = fruitESPEnabled and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 
 	if fruitESPEnabled then
 		UpdateFruitESP()
@@ -665,21 +691,18 @@ GravityBtn.Parent = ScreenGui
 -- ==========================
 -- ISLAND ESP + DROPDOWN
 -- ==========================
-local islandESPEnabled = false
-local islandESPFolder = nil
-
 local IslandESPBtn = Instance.new("TextButton")
 IslandESPBtn.Size = UDim2.new(0, 75, 0, 28)
 IslandESPBtn.Position = UDim2.new(0, 135, 0, 192)
 IslandESPBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 IslandESPBtn.BorderColor3 = Color3.fromRGB(80, 80, 80)
-IslandESPBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 IslandESPBtn.TextSize = 12
 IslandESPBtn.Font = Enum.Font.GothamBold
 IslandESPBtn.RichText = true
 IslandESPBtn.TextStrokeTransparency = 0.8
 IslandESPBtn.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-IslandESPBtn.Text = "Island ESP"
+IslandESPBtn.Text = islandESPEnabled and "Island ESP ON" or "Island ESP"
+IslandESPBtn.TextColor3 = islandESPEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
 IslandESPBtn.Visible = false
 IslandESPBtn.Parent = ScreenGui
 
@@ -812,6 +835,7 @@ IslandESPBtn.MouseButton1Click:Connect(function()
 	islandESPEnabled = not islandESPEnabled
 	IslandESPBtn.Text = islandESPEnabled and "Island ESP ON" or "Island ESP"
 	IslandESPBtn.TextColor3 = islandESPEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 
 	if islandESPEnabled then
 		CreateIslandESP()
@@ -1053,7 +1077,8 @@ if infJump then InfJumpBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
 local EnergyBtn = createButton("Energy Save: " .. (energyBlocked and "ON" or "OFF"), MainFrame)
 if energyBlocked then EnergyBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
 
-local InfSoruBtn = createButton("Inf Soru: OFF", MainFrame)
+local InfSoruBtn = createButton("Inf Soru: " .. (infSoru and "ON" or "OFF"), MainFrame)
+if infSoru then InfSoruBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
 
 local SafeModeBtn = createButton("Safe Mode: " .. (safeMode and "ON" or "OFF"), MainFrame)
 if safeMode then SafeModeBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
@@ -1082,17 +1107,23 @@ local DashDropdownBtn = createButton("Dash Mult: " .. tostring(dashMultiplier) .
 local FastAttackBtn = createButton("Fast Attack: " .. (fastAttack and "ON" or "OFF"), MainFrame)
 if fastAttack then FastAttackBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
 
-local PlayerESPBtn = createButton("Player ESP: OFF", MainFrame)
+local PlayerESPBtn = createButton("Player ESP: " .. (playerESPEnabled and "ON" or "OFF"), MainFrame)
+if playerESPEnabled then PlayerESPBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
 
 local KillAuraBtn = createButton("Kill Aura: OFF", MainFrame)
-local AntiStunBtn = createButton("Anti Stun: OFF", MainFrame)
-local AutoBusoBtn = createButton("Auto Buso: OFF", MainFrame)
 
-local autoBusoEnabled = false
+local AntiStunBtn = createButton("Anti Stun: " .. (antiStunEnabled and "ON" or "OFF"), MainFrame)
+if antiStunEnabled then AntiStunBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
+
+local AutoBusoBtn = createButton("Auto Buso: " .. (autoBusoEnabled and "ON" or "OFF"), MainFrame)
+if autoBusoEnabled then AutoBusoBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
+
+
 AutoBusoBtn.MouseButton1Click:Connect(function()
 	autoBusoEnabled = not autoBusoEnabled
 	AutoBusoBtn.Text = "Auto Buso: " .. (autoBusoEnabled and "ON" or "OFF")
 	AutoBusoBtn.TextColor3 = autoBusoEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 end)
 
 task.spawn(function()
@@ -1252,6 +1283,7 @@ AntiStunBtn.MouseButton1Click:Connect(function()
 	antiStunEnabled = not antiStunEnabled
 	AntiStunBtn.Text = "Anti Stun: " .. (antiStunEnabled and "ON" or "OFF")
 	AntiStunBtn.TextColor3 = antiStunEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 end)
 
 local skillHeld = {
@@ -1483,6 +1515,7 @@ InfSoruBtn.MouseButton1Click:Connect(function()
 	infSoru = not infSoru
 	InfSoruBtn.Text = "Inf Soru: " .. (infSoru and "ON" or "OFF")
 	InfSoruBtn.TextColor3 = infSoru and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 	if infSoru then
 		getInfinity_Soru(infSoru)
 	end
@@ -1790,9 +1823,6 @@ end)
 -- ==========================
 -- RAID ESP & NPC FLOAT
 -- ==========================
-local raidESPEnabled = false
-local raidFloatEnabled = false
-local autoNextIslandEnabled = false
 local processedRaidIslands = {}
 local raidESPFolder = nil
 local raidButtons = {}
@@ -1800,9 +1830,15 @@ local raidButtons = {}
 MainFrame.AutomaticSize = Enum.AutomaticSize.Y
 MainFrame.Size = UDim2.new(0, 110, 0, 0)
 
-local RaidESPBtn = createButton("Raid ESP: OFF", MainFrame)
-local RaidFloatBtn = createButton("Raid Float: OFF", MainFrame)
-local AutoNextIslandBtn = createButton("Auto Next Island: OFF", MainFrame)
+local RaidESPBtn = createButton("Raid ESP: " .. (raidESPEnabled and "ON" or "OFF"), MainFrame)
+if raidESPEnabled then RaidESPBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
+
+local RaidFloatBtn = createButton("Raid Float: " .. (raidFloatEnabled and "ON" or "OFF"), MainFrame)
+if raidFloatEnabled then RaidFloatBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
+
+local AutoNextIslandBtn = createButton("Auto Next Island: " .. (autoNextIslandEnabled and "ON" or "OFF"), MainFrame)
+if autoNextIslandEnabled then AutoNextIslandBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
+
 local RaidDropdownBtn = createButton("Raid Islands ▼", MainFrame)
 
 local RaidFrame = Instance.new("ScrollingFrame")
@@ -2000,6 +2036,7 @@ RaidESPBtn.MouseButton1Click:Connect(function()
 	raidESPEnabled = not raidESPEnabled
 	RaidESPBtn.Text = "Raid ESP: " .. (raidESPEnabled and "ON" or "OFF")
 	RaidESPBtn.TextColor3 = raidESPEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 
 	if raidESPEnabled then
 		CreateRaidESP()
@@ -2012,12 +2049,14 @@ RaidFloatBtn.MouseButton1Click:Connect(function()
 	raidFloatEnabled = not raidFloatEnabled
 	RaidFloatBtn.Text = "Raid Float: " .. (raidFloatEnabled and "ON" or "OFF")
 	RaidFloatBtn.TextColor3 = raidFloatEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 end)
 
 AutoNextIslandBtn.MouseButton1Click:Connect(function()
 	autoNextIslandEnabled = not autoNextIslandEnabled
 	AutoNextIslandBtn.Text = "Auto Next: " .. (autoNextIslandEnabled and "ON" or "OFF")
 	AutoNextIslandBtn.TextColor3 = autoNextIslandEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 	if not autoNextIslandEnabled then
 		processedRaidIslands = {}
 	end
@@ -2042,7 +2081,6 @@ end)
 -- ==========================
 -- PLAYER ESP
 -- ==========================
-local playerESPEnabled = false
 local playerESPFolder = nil
 local activePlayerESPs = {}
 
@@ -2157,6 +2195,7 @@ PlayerESPBtn.MouseButton1Click:Connect(function()
 	playerESPEnabled = not playerESPEnabled
 	PlayerESPBtn.Text = "Player ESP: " .. (playerESPEnabled and "ON" or "OFF")
 	PlayerESPBtn.TextColor3 = playerESPEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	SaveConfig()
 	
 	if not playerESPEnabled then
 		ClearPlayerESP()
@@ -2169,4 +2208,15 @@ task.spawn(function()
 	end
 end)
 
-print("might be this! added sea")
+-- Bootstrap loaded functions for saved toggles
+if infSoru then
+	getInfinity_Soru(infSoru)
+end
+if islandESPEnabled then
+	CreateIslandESP()
+end
+if raidESPEnabled then
+	CreateRaidESP()
+end
+
+print("might be this! added sea rework")
