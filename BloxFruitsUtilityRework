@@ -1,3 +1,4 @@
+-- LAG FIXED: no anti-stun | noclip/raid float no full GetDescendants spam | ESP idle when OFF
 -- added raid island esp
 -- Islands Added
 -- Ultra-optimized (0-Lag Fruit ESP with exact name matching & _WorldOrigin scan)
@@ -30,7 +31,6 @@ local fastAttack = false
 
 -- Extra Config Variables (Moved up for saving/loading)
 local autoBusoEnabled = false
-local antiStunEnabled = false
 local fruitESPEnabled = false
 local islandESPEnabled = false
 local raidESPEnabled = false
@@ -38,7 +38,7 @@ local raidFloatEnabled = false
 local autoNextIslandEnabled = false
 local playerESPEnabled = false
 
--- Global & State Variables for Kill Aura & Anti-Stun
+-- Global & State Variables for Kill Aura
 _G.KillAura = false
 local manualKillAuraToggle = false
 local islandAutoKillAura = false
@@ -232,7 +232,6 @@ local function SaveConfig()
 				fastFallToggle = fastFallToggle,
 				infSoru = infSoru,
 				autoBusoEnabled = autoBusoEnabled,
-				antiStunEnabled = antiStunEnabled,
 				fruitESPEnabled = fruitESPEnabled,
 				islandESPEnabled = islandESPEnabled,
 				raidESPEnabled = raidESPEnabled,
@@ -261,7 +260,6 @@ local function LoadConfig()
 				fastFallToggle = d.fastFallToggle or false
 				infSoru = d.infSoru or false
 				autoBusoEnabled = d.autoBusoEnabled or false
-				antiStunEnabled = d.antiStunEnabled or false
 				fruitESPEnabled = d.fruitESPEnabled or false
 				islandESPEnabled = d.islandESPEnabled or false
 				raidESPEnabled = d.raidESPEnabled or false
@@ -1112,8 +1110,6 @@ if playerESPEnabled then PlayerESPBtn.TextColor3 = Color3.fromRGB(100, 255, 100)
 
 local KillAuraBtn = createButton("Kill Aura: OFF", MainFrame)
 
-local AntiStunBtn = createButton("Anti Stun: " .. (antiStunEnabled and "ON" or "OFF"), MainFrame)
-if antiStunEnabled then AntiStunBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
 
 local AutoBusoBtn = createButton("Auto Buso: " .. (autoBusoEnabled and "ON" or "OFF"), MainFrame)
 if autoBusoEnabled then AutoBusoBtn.TextColor3 = Color3.fromRGB(100, 255, 100) end
@@ -1274,122 +1270,6 @@ task.spawn(function()
 			end
 		end)
 	end
-end)
-
--- ==========================
--- ANTI STUN LOGIC
--- ==========================
-AntiStunBtn.MouseButton1Click:Connect(function()
-	antiStunEnabled = not antiStunEnabled
-	AntiStunBtn.Text = "Anti Stun: " .. (antiStunEnabled and "ON" or "OFF")
-	AntiStunBtn.TextColor3 = antiStunEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
-	SaveConfig()
-end)
-
-local skillHeld = {
-	[Enum.KeyCode.Z] = false,
-	[Enum.KeyCode.X] = false,
-	[Enum.KeyCode.C] = false,
-	[Enum.KeyCode.V] = false,
-}
-local ownMoveUntil = 0
-
-local function isUsingOwnMove()
-	if tick() < ownMoveUntil then return true end
-	for _, down in pairs(skillHeld) do
-		if down then return true end
-	end
-	return false
-end
-
-UserInputService.InputBegan:Connect(function(input, gpe)
-	if skillHeld[input.KeyCode] ~= nil then
-		skillHeld[input.KeyCode] = true
-		ownMoveUntil = tick() + 2.5
-	end
-end)
-
-UserInputService.InputEnded:Connect(function(input, gpe)
-	if skillHeld[input.KeyCode] ~= nil then
-		skillHeld[input.KeyCode] = false
-		ownMoveUntil = tick() + 0.8
-	end
-end)
-
-local function getChar()
-	return LocalPlayer.Character
-end
-local baseWalkSpeed = 16
-
-local function applyAntiStun()
-	if not antiStunEnabled then return end
-	if isUsingOwnMove() then return end
-
-	local char = getChar()
-	if not char then return end
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hum or not hrp or hum.Health <= 0 then return end
-
-	local stun = char:FindFirstChild("Stun") or hrp:FindFirstChild("Stun")
-	if stun and (stun:IsA("NumberValue") or stun:IsA("IntValue")) and stun.Value ~= 0 then
-		stun.Value = 0
-	end
-
-	for _, obj in ipairs(char:GetDescendants()) do
-		if obj:IsA("BodyVelocity") or obj:IsA("LinearVelocity") then
-			if obj.Velocity.Magnitude < 3 and obj.MaxForce.Magnitude > 1000 then
-				pcall(function() obj.MaxForce = Vector3.zero end)
-			end
-		elseif obj:IsA("BodyPosition") or obj:IsA("AlignPosition") then
-			if obj:IsA("BodyPosition") then
-				pcall(function() obj.MaxForce = Vector3.zero end)
-			end
-		end
-	end
-
-	pcall(function()
-		for _, inst in ipairs({ char, hum, hrp }) do
-			for attr, val in pairs(inst:GetAttributes()) do
-				local n = string.lower(tostring(attr))
-				if n:find("stun") or n:find("busy") or n:find("freeze") or n:find("nomove") then
-					if typeof(val) == "boolean" and val == true then
-						inst:SetAttribute(attr, false)
-					elseif typeof(val) == "number" and val > 0 then
-						inst:SetAttribute(attr, 0)
-					end
-				end
-				if n == "canmove" or n == "canwalk" then
-					inst:SetAttribute(attr, true)
-				end
-			end
-		end
-	end)
-
-	if hrp.Anchored then hrp.Anchored = false end
-	if hum.PlatformStand then hum.PlatformStand = false end
-	if hum.Sit then hum.Sit = false end
-	hum.AutoRotate = true
-
-	if hum.WalkSpeed < 12 then
-		hum.WalkSpeed = math.max(baseWalkSpeed, 16)
-	end
-
-	local st = hum:GetState()
-	if st == Enum.HumanoidStateType.Physics
-		or st == Enum.HumanoidStateType.Ragdoll
-		or st == Enum.HumanoidStateType.FallingDown
-		or st == Enum.HumanoidStateType.PlatformStanding then
-		pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
-	end
-end
-
-RunService.Heartbeat:Connect(function()
-	if antiStunEnabled then pcall(applyAntiStun) end
-end)
-
-RunService.RenderStepped:Connect(function()
-	if antiStunEnabled then pcall(applyAntiStun) end
 end)
 
 -- ==========================
@@ -1809,13 +1689,17 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
--- Noclip
+-- Noclip (lag-safe: only character BaseParts, skip if off)
 RunService.Stepped:Connect(function()
-	if noclip and LocalPlayer.Character then
-		for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-			if part:IsA("BasePart") then
-				part.CanCollide = false
-			end
+	if not noclip then return end
+	local char = LocalPlayer.Character
+	if not char then return end
+	for _, part in ipairs(char:GetChildren()) do
+		if part:IsA("BasePart") then
+			part.CanCollide = false
+		elseif part:IsA("Accessory") then
+			local h = part:FindFirstChild("Handle")
+			if h and h:IsA("BasePart") then h.CanCollide = false end
 		end
 	end
 end)
@@ -1895,12 +1779,7 @@ RunService.Heartbeat:Connect(function()
 
 	hrp.AssemblyLinearVelocity = Vector3.zero
 	hrp.AssemblyAngularVelocity = Vector3.zero
-
-	for _, part in ipairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then
-			part.CanCollide = false
-		end
-	end
+	-- collision handled by shared noclip flag; no GetDescendants here
 
 	local npc = GetClosestRaidNPC()
 
@@ -2203,8 +2082,13 @@ PlayerESPBtn.MouseButton1Click:Connect(function()
 end)
 
 task.spawn(function()
-	while task.wait(0.1) do
-		UpdatePlayerESP()
+	while true do
+		if playerESPEnabled then
+			UpdatePlayerESP()
+			task.wait(0.25)
+		else
+			task.wait(1)
+		end
 	end
 end)
 
