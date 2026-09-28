@@ -1,4 +1,4 @@
--- LAG FIXED: no anti-stun | noclip/raid float no full GetDescendants spam | ESP idle when OFF
+-- LAG FIXED + noclip auto: ON during fly/safe/tween/raid float | OFF when none active
 -- added raid island esp
 -- Islands Added
 -- Ultra-optimized (0-Lag Fruit ESP with exact name matching & _WorldOrigin scan)
@@ -42,6 +42,11 @@ local playerESPEnabled = false
 _G.KillAura = false
 local manualKillAuraToggle = false
 local islandAutoKillAura = false
+
+-- Single source of truth: noclip ON only while fly / safe mode / tween / raid float
+local function refreshNoclip()
+	noclip = flying or safeModeTriggered or (activeTweenConnection ~= nil) or raidFloatEnabled
+end
 
 local lastSafeJump = 0
 local configFile = "TinyGuiSettings.json"
@@ -88,9 +93,7 @@ local function StopAllTweens()
 		hrp.Anchored = false
 		hrp.AssemblyLinearVelocity = Vector3.zero
 	end
-	if not flying and not safeModeTriggered then
-		noclip = false
-	end
+	refreshNoclip()
 end
 
 local function StartCustomTween(targetPos, targetName, onComplete)
@@ -1280,9 +1283,7 @@ local function toggleFly()
 	FlyBtn.Text = "Fly [P]: " .. (flying and "ON" or "OFF")
 	FlyBtn.TextColor3 = flying and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
 
-	if not safeModeTriggered then
-		noclip = flying
-	end
+	refreshNoclip()
 	SaveConfig()
 
 	local char = LocalPlayer.Character
@@ -1536,7 +1537,7 @@ LocalPlayer.CharacterAdded:Connect(function()
 		FlyBtn.Text = "Fly [P]: OFF"
 		FlyBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 		workspace.Gravity = normalGravity
-		noclip = false
+		refreshNoclip()
 		SaveConfig()
 	end
 	if spectating then
@@ -1605,11 +1606,7 @@ RunService.Heartbeat:Connect(function()
 		lastHealth = hum.Health
 	end
 
-	if safeModeTriggered then
-		noclip = true
-	else
-		noclip = flying or (activeTweenConnection ~= nil) or raidFloatEnabled
-	end
+	refreshNoclip()
 
 	if not flying and hum and hrp then
 		if fastFallToggle then
@@ -1928,6 +1925,7 @@ RaidFloatBtn.MouseButton1Click:Connect(function()
 	raidFloatEnabled = not raidFloatEnabled
 	RaidFloatBtn.Text = "Raid Float: " .. (raidFloatEnabled and "ON" or "OFF")
 	RaidFloatBtn.TextColor3 = raidFloatEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
+	refreshNoclip()
 	SaveConfig()
 end)
 
