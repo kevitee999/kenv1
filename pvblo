@@ -1,6 +1,7 @@
 -- ============================================================
--- Silent Aim + Cam Lock + Anti Stun + Soru + Auto Ken + Goto Player
--- UPDATED: LARGER TEXT SIZES FOR DROPDOWN & ESP NAMES
+-- Silent Aim + Cam Lock + Anti Stun + Soru + Auto Ken + NPC Mode
+-- + Goto Player (elevated travel, smooth stick, noclip)
+-- FINAL
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -9,8 +10,6 @@ local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Lighting = game:GetService("Lighting")
-
 local plr = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -22,28 +21,33 @@ ABmethod = "Nearest Aim"
 _G.NoAimTeam = true
 
 local currentTarget = nil
+local currentNpc = nil
 local camLockOn = false
 local silentAimEnabled = true
 local antiStunEnabled = false
 local soruEnabled = true
 local autoKenEnabled = false
+local npcModeEnabled = false
 local nameEspEnabled = false
 local panelHidden = true
+local isFollowingPlayer = false
+local followTween = nil
 local highlights = {}
 local nameEspGuis = {}
 local FOV_DEG = 80
 local lastSoru = 0
 local SORU_CD = 0.2
 local STICK_DIST = 3
+local MAX_SORU_DIST = 750
+local TRAVEL_HEIGHT = 40
+local ARRIVE_DIST = 12
+local STICK_HEIGHT = 2
+local TRAVEL_SPEED = 200
 
 local HIGHLIGHT_TARGET = Color3.fromRGB(255, 0, 0)
-
 local baseWalkSpeed = 16
 local baseJumpPower = 50
 
--- ============================================================
--- OWN SKILL TRACKING
--- ============================================================
 local skillHeld = {
 	[Enum.KeyCode.Z] = false,
 	[Enum.KeyCode.X] = false,
@@ -60,23 +64,19 @@ local function isUsingOwnMove()
 	return false
 end
 
-UserInputService.InputBegan:Connect(function(input, gpe)
+UserInputService.InputBegan:Connect(function(input)
 	if skillHeld[input.KeyCode] ~= nil then
 		skillHeld[input.KeyCode] = true
 		ownMoveUntil = tick() + 2.5
 	end
 end)
-
-UserInputService.InputEnded:Connect(function(input, gpe)
+UserInputService.InputEnded:Connect(function(input)
 	if skillHeld[input.KeyCode] ~= nil then
 		skillHeld[input.KeyCode] = false
 		ownMoveUntil = tick() + 0.8
 	end
 end)
 
--- ============================================================
--- CONFIG MANAGEMENT
--- ============================================================
 local function SaveConfig()
 	if not writefile then return end
 	pcall(function()
@@ -85,6 +85,7 @@ local function SaveConfig()
 			antiStunEnabled = antiStunEnabled,
 			soruEnabled = soruEnabled,
 			autoKenEnabled = autoKenEnabled,
+			npcModeEnabled = npcModeEnabled,
 		}))
 	end)
 end
@@ -97,6 +98,7 @@ local function LoadConfig()
 		if typeof(data.antiStunEnabled) == "boolean" then antiStunEnabled = data.antiStunEnabled end
 		if typeof(data.soruEnabled) == "boolean" then soruEnabled = data.soruEnabled end
 		if typeof(data.autoKenEnabled) == "boolean" then autoKenEnabled = data.autoKenEnabled end
+		if typeof(data.npcModeEnabled) == "boolean" then npcModeEnabled = data.npcModeEnabled end
 	end)
 end
 LoadConfig()
@@ -120,6 +122,43 @@ local function isValidTarget(v)
 	return true
 end
 
+local function getEnemyRoot(enemy)
+	if not enemy or not enemy.Parent then return nil end
+	return enemy:FindFirstChild("HumanoidRootPart")
+		or enemy:FindFirstChild("UpperTorso")
+		or enemy:FindFirstChild("Torso")
+		or enemy:FindFirstChildWhichIsA("BasePart")
+end
+
+local function isValidEnemy(enemy)
+	if not enemy or not enemy.Parent then return false end
+	local hum = enemy:FindFirstChildOfClass("Humanoid")
+	if hum and hum.Health <= 0 then return false end
+	if enemy:FindFirstChildOfClass("ForceField") then return false end
+	return getEnemyRoot(enemy) ~= nil
+end
+
+local function getNearestEnemy(maxDist)
+	maxDist = maxDist or 500
+	local char = getChar()
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil end
+	local folder = workspace:FindFirstChild("Enemies")
+	if not folder then return nil end
+	local best, bestDist = nil, maxDist
+	for _, e in ipairs(folder:GetChildren()) do
+		if isValidEnemy(e) then
+			local root = getEnemyRoot(e)
+			local d = (root.Position - hrp.Position).Magnitude
+			if d < bestDist then
+				bestDist = d
+				best = e
+			end
+		end
+	end
+	return best
+end
+
 local function inFOV(pos)
 	local off = pos - Camera.CFrame.Position
 	if off.Magnitude < 1 then return true end
@@ -131,6 +170,8 @@ local function getTargetEndCF(hrp)
 	if not currentTarget or not isValidTarget(currentTarget) then return nil end
 	local tHRP = currentTarget.Character:FindFirstChild("HumanoidRootPart")
 	if not tHRP or not hrp then return nil end
+	local dist = (tHRP.Position - hrp.Position).Magnitude
+	if dist > MAX_SORU_DIST then return nil end
 	local startCF = hrp.CFrame
 	return (startCF - startCF.Position) + tHRP.Position + Vector3.new(0, hrp.Size.Y * 1.5, 0)
 end
@@ -144,14 +185,17 @@ local function forceToTarget()
 	end
 end
 
--- ============================================================
--- TRANSPARENT FORCEFIELD TARGET VISUALS
--- ============================================================
-local bubblePart = nil
-local sphereAdornment = nil
-local bubbleLight = nil
-local tracerBeam = nil
-local att0, att1 = nil, nil
+local function setFollowNoclip(char, on)
+	if not char then return end
+	for _, p in ipairs(char:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.CanCollide = not on
+		end
+	end
+end
+
+-- Visuals
+local bubblePart, sphereAdornment, bubbleLight, tracerBeam, att0, att1
 
 local function destroyVisuals()
 	if bubblePart then pcall(function() bubblePart:Destroy() end) bubblePart = nil end
@@ -163,23 +207,31 @@ local function destroyVisuals()
 end
 
 local function updateVisuals()
-	if not currentTarget or not isValidTarget(currentTarget) or not silentAimEnabled then
-		destroyVisuals()
-		return
+	if not silentAimEnabled then destroyVisuals() return end
+
+	local aimRoot = nil
+	if npcModeEnabled then
+		if not currentNpc or not isValidEnemy(currentNpc) then
+			currentNpc = getNearestEnemy(500)
+		end
+		if currentNpc then aimRoot = getEnemyRoot(currentNpc) end
+	elseif currentTarget and isValidTarget(currentTarget) then
+		aimRoot = currentTarget.Character:FindFirstChild("HumanoidRootPart")
 	end
-	local tHRP = currentTarget.Character:FindFirstChild("HumanoidRootPart")
+
+	if not aimRoot then destroyVisuals() return end
+
 	local myChar = getChar()
 	local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-	if not tHRP then destroyVisuals() return end
 
 	if not bubblePart or not bubblePart.Parent then
 		bubblePart = Instance.new("Part")
 		bubblePart.Name = "TargetBubble"
 		bubblePart.Shape = Enum.PartType.Ball
-		bubblePart.Size = Vector3.new(12, 12, 12)
-		bubblePart.Transparency = 0.85
-		bubblePart.Color = Color3.fromRGB(255, 30, 30)
-		bubblePart.Material = Enum.Material.ForceField
+		bubblePart.Size = Vector3.new(18, 18, 18)
+		bubblePart.Transparency = 0.5
+		bubblePart.Color = Color3.fromRGB(255, 20, 20)
+		bubblePart.Material = Enum.Material.Neon
 		bubblePart.CanCollide = false
 		bubblePart.CanQuery = false
 		bubblePart.CanTouch = false
@@ -187,23 +239,38 @@ local function updateVisuals()
 		bubblePart.CastShadow = false
 		bubblePart.Parent = workspace
 
+		local outer = Instance.new("Part")
+		outer.Name = "TargetBubbleOuter"
+		outer.Shape = Enum.PartType.Ball
+		outer.Size = Vector3.new(24, 24, 24)
+		outer.Transparency = 0.75
+		outer.Color = Color3.fromRGB(255, 50, 50)
+		outer.Material = Enum.Material.ForceField
+		outer.CanCollide = false
+		outer.CanQuery = false
+		outer.CanTouch = false
+		outer.Anchored = true
+		outer.CastShadow = false
+		outer.Parent = bubblePart
+
 		bubbleLight = Instance.new("PointLight")
-		bubbleLight.Color = Color3.fromRGB(255, 50, 50)
-		bubbleLight.Range = 12
-		bubbleLight.Brightness = 0.8
+		bubbleLight.Color = Color3.fromRGB(255, 40, 40)
+		bubbleLight.Range = 20
+		bubbleLight.Brightness = 2
 		bubbleLight.Parent = bubblePart
 
 		sphereAdornment = Instance.new("SphereHandleAdornment")
-		sphereAdornment.Name = "TargetAdornment"
-		sphereAdornment.Radius = 6.2
+		sphereAdornment.Adornee = bubblePart
+		sphereAdornment.Radius = 9.5
 		sphereAdornment.Color3 = Color3.fromRGB(255, 0, 0)
-		sphereAdornment.Transparency = 0.85
+		sphereAdornment.Transparency = 0.7
 		sphereAdornment.AlwaysOnTop = true
 		sphereAdornment.ZIndex = 5
-		sphereAdornment.Adornee = bubblePart
 		sphereAdornment.Parent = bubblePart
 	end
-	bubblePart.CFrame = tHRP.CFrame
+	bubblePart.CFrame = aimRoot.CFrame
+	local outer = bubblePart:FindFirstChild("TargetBubbleOuter")
+	if outer then outer.CFrame = aimRoot.CFrame end
 
 	if myHRP then
 		if not att0 or not att0.Parent then
@@ -214,21 +281,22 @@ local function updateVisuals()
 		if not att1 or not att1.Parent then
 			att1 = Instance.new("Attachment")
 			att1.Name = "SA_Att1"
-			att1.Parent = tHRP
+			att1.Parent = aimRoot
 		else
-			att1.Parent = tHRP
+			att1.Parent = aimRoot
 		end
 		if not tracerBeam or not tracerBeam.Parent then
 			tracerBeam = Instance.new("Beam")
 			tracerBeam.Name = "SA_Tracer"
 			tracerBeam.Attachment0 = att0
 			tracerBeam.Attachment1 = att1
-			tracerBeam.Color = ColorSequence.new(Color3.fromRGB(255, 50, 50))
-			tracerBeam.Width0 = 0.2
-			tracerBeam.Width1 = 0.2
+			tracerBeam.Color = ColorSequence.new(Color3.fromRGB(255, 0, 0))
+			tracerBeam.Width0 = 0.35
+			tracerBeam.Width1 = 0.35
 			tracerBeam.FaceCamera = true
-			tracerBeam.LightEmission = 0.8
-			tracerBeam.Transparency = NumberSequence.new(0.2)
+			tracerBeam.LightEmission = 1
+			tracerBeam.LightInfluence = 0
+			tracerBeam.Transparency = NumberSequence.new(0)
 			tracerBeam.Parent = myHRP
 		else
 			tracerBeam.Attachment0 = att0
@@ -237,9 +305,7 @@ local function updateVisuals()
 	end
 end
 
--- ============================================================
--- NAME ESP (600 STUDS)
--- ============================================================
+-- Name ESP
 local function clearNameEsp()
 	for v, guiObj in pairs(nameEspGuis) do
 		if guiObj then pcall(function() guiObj:Destroy() end) end
@@ -254,64 +320,47 @@ local function updateNameEsp()
 	end
 	local myChar = getChar()
 	local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-	
 	local activePlayers = {}
 	for _, v in ipairs(Players:GetPlayers()) do
 		if v ~= plr and v.Character and v.Character:FindFirstChild("Head") and v.Character:FindFirstChild("HumanoidRootPart") then
 			local hum = v.Character:FindFirstChildOfClass("Humanoid")
-			if hum and hum.Health > 0 then
+			if hum and hum.Health > 0 and myHRP then
 				local tHRP = v.Character.HumanoidRootPart
-				if myHRP then
-					local dist = (tHRP.Position - myHRP.Position).Magnitude
-					if dist <= 600 then
-						activePlayers[v] = true
-						local espGui = nameEspGuis[v]
-						if not espGui or not espGui.Parent then
-							espGui = Instance.new("BillboardGui")
-							espGui.Name = "NameESP"
-							espGui.Size = UDim2.new(0, 160, 0, 40)
-							espGui.StudsOffset = Vector3.new(0, 2.5, 0)
-							espGui.AlwaysOnTop = true
-							
-							local txt = Instance.new("TextLabel")
-							txt.Name = "Text"
-							txt.Size = UDim2.new(1, 0, 1, 0)
-							txt.BackgroundTransparency = 1
-							txt.Font = Enum.Font.GothamBold
-							txt.TextSize = 13 -- Larger ESP text size
-							txt.TextColor3 = Color3.fromRGB(255, 50, 50) -- Red
-							txt.TextStrokeTransparency = 0.5
-							txt.Parent = espGui
-							
-							espGui.Adornee = v.Character.Head
-							espGui.Parent = v.Character
-							nameEspGuis[v] = espGui
-						end
-						local txt = espGui:FindFirstChild("Text")
-						if txt then
-							txt.Text = v.DisplayName
-						end
-					else
-						if nameEspGuis[v] then
-							nameEspGuis[v]:Destroy()
-							nameEspGuis[v] = nil
-						end
+				local dist = (tHRP.Position - myHRP.Position).Magnitude
+				if dist <= 600 then
+					activePlayers[v] = true
+					local espGui = nameEspGuis[v]
+					if not espGui or not espGui.Parent then
+						espGui = Instance.new("BillboardGui")
+						espGui.Name = "NameESP"
+						espGui.Size = UDim2.new(0, 160, 0, 40)
+						espGui.StudsOffset = Vector3.new(0, 2.5, 0)
+						espGui.AlwaysOnTop = true
+						local txt = Instance.new("TextLabel")
+						txt.Name = "Text"
+						txt.Size = UDim2.new(1, 0, 1, 0)
+						txt.BackgroundTransparency = 1
+						txt.Font = Enum.Font.GothamBold
+						txt.TextSize = 13
+						txt.TextColor3 = Color3.fromRGB(255, 50, 50)
+						txt.TextStrokeTransparency = 0.5
+						txt.Parent = espGui
+						espGui.Adornee = v.Character.Head
+						espGui.Parent = v.Character
+						nameEspGuis[v] = espGui
 					end
+					local txt = espGui:FindFirstChild("Text")
+					if txt then txt.Text = v.DisplayName end
+				else
+					if nameEspGuis[v] then nameEspGuis[v]:Destroy() nameEspGuis[v] = nil end
 				end
 			else
-				if nameEspGuis[v] then
-					nameEspGuis[v]:Destroy()
-					nameEspGuis[v] = nil
-				end
+				if nameEspGuis[v] then nameEspGuis[v]:Destroy() nameEspGuis[v] = nil end
 			end
 		else
-			if nameEspGuis[v] then
-				nameEspGuis[v]:Destroy()
-				nameEspGuis[v] = nil
-			end
+			if nameEspGuis[v] then nameEspGuis[v]:Destroy() nameEspGuis[v] = nil end
 		end
 	end
-	
 	for v, guiObj in pairs(nameEspGuis) do
 		if not v.Parent or not activePlayers[v] then
 			if guiObj then guiObj:Destroy() end
@@ -320,16 +369,13 @@ local function updateNameEsp()
 	end
 end
 
--- ============================================================
--- NAMECALL HOOK
--- ============================================================
+-- Namecall
 local gg = getrawmetatable(game)
 local old = gg.__namecall
 setreadonly(gg, false)
 gg.__namecall = newcclosure(function(...)
 	local method = getnamecallmethod()
 	local args = { ... }
-
 	if tostring(method) == "FireServer" then
 		if soruEnabled and tostring(args[2]) == "Soru" then
 			local char = plr.Character
@@ -344,9 +390,10 @@ gg.__namecall = newcclosure(function(...)
 					pcall(function() if hrp and hrp.Parent then hrp.CFrame = endCF end end)
 				end)
 				return old(unpack(args))
+			else
+				return
 			end
 		end
-
 		if tostring(args[1]) == "RemoteEvent" then
 			if tostring(args[2]) ~= "true" and tostring(args[2]) ~= "false" then
 				if silentAimEnabled and (
@@ -359,14 +406,10 @@ gg.__namecall = newcclosure(function(...)
 			end
 		end
 	end
-
 	return old(...)
 end)
 setreadonly(gg, true)
 
--- ============================================================
--- HIGHLIGHTS (ONLY TARGET GETS RED HIGHLIGHT)
--- ============================================================
 local function clearHighlight(char)
 	local h = highlights[char]
 	if h then pcall(function() h:Destroy() end) highlights[char] = nil end
@@ -384,7 +427,7 @@ local function setHighlight(char, color, fill)
 	end
 	h.FillColor = color
 	h.OutlineColor = color
-	h.FillTransparency = fill or 0.3
+	h.FillTransparency = fill or 0.25
 	h.OutlineTransparency = 0
 	h.Enabled = true
 end
@@ -433,6 +476,11 @@ local function doSoruToTarget()
 		print("[Soru] No target — press B first")
 		return
 	end
+	local tHRP = currentTarget.Character and currentTarget.Character:FindFirstChild("HumanoidRootPart")
+	if tHRP and (tHRP.Position - hrp.Position).Magnitude > MAX_SORU_DIST then
+		notify("Target too far for Soru! (>750 studs)")
+		return
+	end
 	local startCF = hrp.CFrame
 	local endCF = getTargetEndCF(hrp)
 	if not endCF then return end
@@ -446,13 +494,8 @@ local function doSoruToTarget()
 	print("[Soru] →", currentTarget.Name)
 end
 
--- ============================================================
--- SAFE ANTI-STUN
--- ============================================================
 local function applyAntiStun()
 	if not antiStunEnabled then return end
-	if isUsingOwnMove() then return end
-
 	local char = getChar()
 	if not char then return end
 	local hum = char:FindFirstChildOfClass("Humanoid")
@@ -464,14 +507,24 @@ local function applyAntiStun()
 		stun.Value = 0
 	end
 
+	local stunObjects = hrp:FindFirstChild("StunObjects") or char:FindFirstChild("StunObjects")
+	if stunObjects then
+		for _, obj in ipairs(stunObjects:GetChildren()) do
+			pcall(function() obj:Destroy() end)
+		end
+	end
+
 	for _, obj in ipairs(char:GetDescendants()) do
-		if obj:IsA("BodyVelocity") or obj:IsA("LinearVelocity") then
-			if obj.Velocity.Magnitude < 3 and obj.MaxForce.Magnitude > 1000 then
-				pcall(function() obj.MaxForce = Vector3.zero end)
-			end
-		elseif obj:IsA("BodyPosition") or obj:IsA("AlignPosition") then
-			if obj:IsA("BodyPosition") then
-				pcall(function() obj.MaxForce = Vector3.zero end)
+		if obj:IsA("BodyVelocity") or obj:IsA("BodyPosition") or obj:IsA("BodyAngularVelocity")
+			or obj:IsA("LinearVelocity") or obj:IsA("AlignPosition") then
+			if obj:IsA("BodyVelocity") then
+				if obj.Velocity.Magnitude < 4 and obj.MaxForce.Magnitude > 500 then
+					pcall(function() obj:Destroy() end)
+				end
+			elseif obj:IsA("BodyPosition") or obj:IsA("AlignPosition") then
+				pcall(function() obj:Destroy() end)
+			elseif obj:IsA("BodyAngularVelocity") and obj.AngularVelocity.Magnitude < 1 then
+				pcall(function() obj:Destroy() end)
 			end
 		end
 	end
@@ -480,10 +533,12 @@ local function applyAntiStun()
 		for _, inst in ipairs({ char, hum, hrp }) do
 			for attr, val in pairs(inst:GetAttributes()) do
 				local n = string.lower(tostring(attr))
-				if n:find("stun") or n:find("busy") or n:find("freeze") or n:find("nomove") then
-					if typeof(val) == "boolean" and val == true then
+				if n:find("stun") or n:find("busy") or n:find("freeze") or n:find("lock")
+					or n:find("disable") or n:find("nomove") or n:find("negative")
+					or n:find("combo") or n:find("action") or n:find("using") then
+					if typeof(val) == "boolean" then
 						inst:SetAttribute(attr, false)
-					elseif typeof(val) == "number" and val > 0 then
+					elseif typeof(val) == "number" then
 						inst:SetAttribute(attr, 0)
 					end
 				end
@@ -494,14 +549,12 @@ local function applyAntiStun()
 		end
 	end)
 
-	if hrp.Anchored then hrp.Anchored = false end
-	if hum.PlatformStand then hum.PlatformStand = false end
-	if hum.Sit then hum.Sit = false end
+	hrp.Anchored = false
+	hum.PlatformStand = false
+	hum.Sit = false
 	hum.AutoRotate = true
-
-	if hum.WalkSpeed < 12 then
-		hum.WalkSpeed = math.max(baseWalkSpeed, 16)
-	end
+	if hum.WalkSpeed < 12 then hum.WalkSpeed = math.max(baseWalkSpeed, 16) end
+	if hum.UseJumpPower and hum.JumpPower < 20 then hum.JumpPower = math.max(baseJumpPower, 50) end
 
 	local st = hum:GetState()
 	if st == Enum.HumanoidStateType.Physics
@@ -517,14 +570,11 @@ RunService.Heartbeat:Connect(function()
 	pcall(updateVisuals)
 	pcall(updateNameEsp)
 end)
-
 RunService.RenderStepped:Connect(function()
 	if antiStunEnabled then pcall(applyAntiStun) end
 end)
 
--- ============================================================
--- AUTO KEN
--- ============================================================
+-- Auto Ken
 local kenActive = false
 local kenDisableConn = nil
 
@@ -536,10 +586,7 @@ local function stopAutoKen()
 	end
 	pcall(function()
 		local OM = require(ReplicatedStorage.Global).OM
-		if OM then
-			OM:setActive(false)
-			OM:refresh()
-		end
+		if OM then OM:setActive(false) OM:refresh() end
 	end)
 	pcall(function()
 		ReplicatedStorage.Remotes.CommE:FireServer("Ken", false)
@@ -549,35 +596,27 @@ end
 local function startAutoKen()
 	stopAutoKen()
 	kenActive = true
-
 	task.spawn(function()
 		pcall(function()
 			local MobileUIController_m = require(ReplicatedStorage.Controllers.UI.MobileUIController)
 			local DisableKen = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("DisableKen")
 			local VisionRadius = plr:WaitForChild("VisionRadius")
-
 			kenDisableConn = DisableKen.OnClientEvent:Connect(function()
 				if not kenActive then return end
 				local BoundActionKen = MobileUIController_m:GetContextButton("BoundActionKen")
-				if BoundActionKen then
-					BoundActionKen:SetAttribute("Selected", true)
-				end
+				if BoundActionKen then BoundActionKen:SetAttribute("Selected", true) end
 			end)
-
 			local lastKenAttempt = 0
-
 			while kenActive and autoKenEnabled do
 				task.wait(0.3)
 				local char = getChar()
 				if not char then continue end
 				local hum = char:FindFirstChildOfClass("Humanoid")
 				if not hum or hum.Health <= 0 or not char:IsDescendantOf(workspace) then continue end
-
 				local OM = require(ReplicatedStorage.Global).OM
 				if OM then
 					OM.radius = math.clamp(OM.radius + VisionRadius.Value * 0.2, 0, VisionRadius.Value)
 					OM:refresh()
-
 					if not OM.active then
 						if tick() - lastKenAttempt > 1.5 then
 							lastKenAttempt = tick()
@@ -602,7 +641,6 @@ plr.CharacterAdded:Connect(function(char)
 	end
 	if autoKenEnabled then startAutoKen() end
 end)
-
 if plr.Character then
 	local hum = plr.Character:FindFirstChildOfClass("Humanoid")
 	if hum then
@@ -612,10 +650,25 @@ if plr.Character then
 end
 if autoKenEnabled then startAutoKen() end
 
+-- MousePos / silent aim (players + NPC)
 task.spawn(function()
 	while wait() do
 		pcall(function()
 			if not silentAimEnabled or not _G.AimMethod then return end
+
+			if npcModeEnabled then
+				if not currentNpc or not isValidEnemy(currentNpc) then
+					currentNpc = getNearestEnemy(500)
+				end
+				if currentNpc then
+					local root = getEnemyRoot(currentNpc)
+					if root then
+						MousePos = root.Position
+						return
+					end
+				end
+			end
+
 			if currentTarget and isValidTarget(currentTarget) then
 				MousePos = currentTarget.Character.HumanoidRootPart.Position
 				return
@@ -637,11 +690,14 @@ task.spawn(function()
 end)
 
 local lockBtn, targetLabel, dropdownBtn, dropdownScroll
-local refreshPlayerDropdown -- Forward declaration
+local refreshPlayerDropdown
 
 local function updateTargetLabel()
 	if not targetLabel then return end
-	if currentTarget and isValidTarget(currentTarget) then
+	if npcModeEnabled and currentNpc and isValidEnemy(currentNpc) then
+		targetLabel.Text = "NPC: " .. currentNpc.Name
+		targetLabel.TextColor3 = Color3.fromRGB(255, 140, 60)
+	elseif currentTarget and isValidTarget(currentTarget) then
 		targetLabel.Text = "Target: " .. currentTarget.DisplayName
 		targetLabel.TextColor3 = Color3.fromRGB(255, 90, 90)
 	else
@@ -655,6 +711,13 @@ local function clearTarget(reason)
 	currentTarget = nil
 	camLockOn = false
 	_G.AimMethod = false
+	isFollowingPlayer = false
+	if followTween then
+		pcall(function() followTween:Cancel() end)
+		followTween = nil
+	end
+	local char = getChar()
+	setFollowNoclip(char, false)
 	destroyVisuals()
 	if lockBtn then
 		lockBtn.Text = "Cam Lock: OFF"
@@ -684,8 +747,13 @@ local function selectTargetFOV()
 	if best then
 		currentTarget = best
 		_G.AimMethod = true
+		camLockOn = true
 		ABmethod = "Nearest Aim"
 		MousePos = best.Character.HumanoidRootPart.Position
+		if lockBtn then
+			lockBtn.Text = "Cam Lock: " .. best.DisplayName
+			lockBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+		end
 		updateTargetLabel()
 		if refreshPlayerDropdown then refreshPlayerDropdown() end
 		print("[Target]", best.Name)
@@ -698,41 +766,95 @@ task.spawn(function()
 		if currentTarget and not isValidTarget(currentTarget) then
 			clearTarget("dead")
 		end
+		if npcModeEnabled then
+			if not currentNpc or not isValidEnemy(currentNpc) then
+				currentNpc = getNearestEnemy(500)
+				updateTargetLabel()
+			end
+		end
 	end
 end)
 
--- ============================================================
--- GOTO PLAYER KEYBIND (PAGEDOWN): TP IF <= 400 STUDS, ELSE TWEEN
--- ============================================================
+local function startFollowingTarget()
+	if isFollowingPlayer then return end
+	if not currentTarget or not isValidTarget(currentTarget) then return end
+
+	isFollowingPlayer = true
+	if followTween then
+		pcall(function() followTween:Cancel() end)
+		followTween = nil
+	end
+
+	notify("Following " .. currentTarget.DisplayName)
+
+	task.spawn(function()
+		while isFollowingPlayer and currentTarget and isValidTarget(currentTarget) do
+			local char = getChar()
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			local tHRP = currentTarget.Character and currentTarget.Character:FindFirstChild("HumanoidRootPart")
+
+			if hrp and tHRP then
+				setFollowNoclip(char, true)
+				local behindPos = tHRP.Position - tHRP.CFrame.LookVector * STICK_DIST
+				local flatDist = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
+					- Vector3.new(behindPos.X, 0, behindPos.Z)).Magnitude
+
+				if flatDist > ARRIVE_DIST then
+					local travelGoal = behindPos + Vector3.new(0, TRAVEL_HEIGHT, 0)
+					local offset = travelGoal - hrp.Position
+					local dist = offset.Magnitude
+					local step = math.min(dist, TRAVEL_SPEED * 0.03)
+					if dist > 0.5 then
+						hrp.CFrame = CFrame.new(hrp.Position + offset.Unit * step, behindPos)
+					end
+				else
+					local stickPos = behindPos + Vector3.new(0, STICK_HEIGHT, 0)
+					local goalCF = CFrame.new(stickPos, tHRP.Position)
+					hrp.CFrame = hrp.CFrame:Lerp(goalCF, 0.28)
+				end
+
+				hrp.AssemblyLinearVelocity = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
+				if hum then
+					hum.PlatformStand = false
+					hum.Sit = false
+				end
+			end
+			task.wait()
+		end
+
+		local char = getChar()
+		setFollowNoclip(char, false)
+		isFollowingPlayer = false
+		if followTween then
+			pcall(function() followTween:Cancel() end)
+			followTween = nil
+		end
+	end)
+end
+
 UserInputService.InputBegan:Connect(function(input, gpe)
 	if input.KeyCode == Enum.KeyCode.R then
 		doSoruToTarget()
 		return
 	end
 	if input.KeyCode == Enum.KeyCode.PageDown then
-		if not currentTarget or not isValidTarget(currentTarget) then
-			notify("No target selected!")
-			print("[GotoPlayer] No target")
+		if isFollowingPlayer then
+			isFollowingPlayer = false
+			if followTween then
+				pcall(function() followTween:Cancel() end)
+				followTween = nil
+			end
+			setFollowNoclip(getChar(), false)
+			notify("Stopped following target")
 			return
 		end
-		local char = getChar()
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		local tHRP = currentTarget.Character:FindFirstChild("HumanoidRootPart")
-		if hrp and tHRP then
-			local targetCF = CFrame.new(tHRP.Position - tHRP.CFrame.LookVector * STICK_DIST, tHRP.Position)
-			local dist = (tHRP.Position - hrp.Position).Magnitude
-			if dist <= 400 then
-				pcall(function() hrp.CFrame = targetCF end)
-				notify("Teleported to " .. currentTarget.DisplayName)
-				print("[GotoPlayer] TP (Dist: " .. math.floor(dist) .. ")")
-			else
-				notify("Tweening to " .. currentTarget.DisplayName)
-				print("[GotoPlayer] Tween (Dist: " .. math.floor(dist) .. ")")
-				local tweenTime = math.clamp(dist / 300, 0.5, 3.5)
-				local tween = TweenService:Create(hrp, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {CFrame = targetCF})
-				tween:Play()
-			end
+		if not currentTarget or not isValidTarget(currentTarget) then
+			notify("No target selected!")
+			return
 		end
+		startFollowingTarget()
 		return
 	end
 	if gpe then return end
@@ -746,10 +868,26 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	end
 end)
 
-RunService.RenderStepped:Connect(function()
-	if camLockOn and currentTarget and isValidTarget(currentTarget) then
-		local hrp = currentTarget.Character.HumanoidRootPart
-		Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, hrp.Position), 0.15)
+-- Cam lock: players or NPC
+RunService.RenderStepped:Connect(function(dt)
+	if not camLockOn then return end
+	local lookAt = nil
+	if npcModeEnabled then
+		if not currentNpc or not isValidEnemy(currentNpc) then
+			currentNpc = getNearestEnemy(500)
+		end
+		if currentNpc then
+			local root = getEnemyRoot(currentNpc)
+			if root then lookAt = root.Position end
+		end
+	elseif currentTarget and isValidTarget(currentTarget) then
+		local hrp = currentTarget.Character and currentTarget.Character:FindFirstChild("HumanoidRootPart")
+		if hrp then lookAt = hrp.Position end
+	end
+	if lookAt then
+		local currentCF = Camera.CFrame
+		local targetCF = CFrame.new(currentCF.Position, lookAt)
+		Camera.CFrame = currentCF:Lerp(targetCF, math.clamp(dt * 28, 0, 1))
 	end
 end)
 
@@ -762,7 +900,15 @@ task.spawn(function()
 			continue
 		end
 		local seen = {}
-		if currentTarget and isValidTarget(currentTarget) then
+		if npcModeEnabled then
+			if not currentNpc or not isValidEnemy(currentNpc) then
+				currentNpc = getNearestEnemy(500)
+			end
+			if currentNpc then
+				setHighlight(currentNpc, HIGHLIGHT_TARGET, 0.25)
+				seen[currentNpc] = true
+			end
+		elseif currentTarget and isValidTarget(currentTarget) then
 			setHighlight(currentTarget.Character, HIGHLIGHT_TARGET, 0.2)
 			seen[currentTarget.Character] = true
 		end
@@ -791,36 +937,24 @@ local function makeDraggable(frame)
 	UserInputService.InputChanged:Connect(function(input)
 		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 			local d = input.Position - dragStart
-			panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+			frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
 		end
 	end)
 end
 
--- ============================================================
--- USER INTERFACE (ALWAYS OPEN BY DEFAULT ON STARTUP)
--- ============================================================
+-- UI
 local gui = Instance.new("ScreenGui")
 gui.Name = "CamLockUI"
 gui.ResetOnSpawn = false
-
-local function setGuiParent()
-	local success = pcall(function()
-		if gethui then 
-			gui.Parent = gethui() 
-		else 
-			gui.Parent = game.CoreGui 
-		end
-	end)
-	if not success or not gui.Parent then
-		pcall(function()
-			gui.Parent = plr:WaitForChild("PlayerGui")
-		end)
-	end
+pcall(function()
+	if gethui then gui.Parent = gethui() else gui.Parent = game.CoreGui end
+end)
+if not gui.Parent then
+	pcall(function() gui.Parent = plr:WaitForChild("PlayerGui") end)
 end
-setGuiParent()
 
 local panel = Instance.new("Frame")
-panel.Size = UDim2.new(0, 58, 0, 130)
+panel.Size = UDim2.new(0, 58, 0, 150)
 panel.Position = UDim2.new(0, 10, 0, 10)
 panel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 panel.BackgroundTransparency = 0.25
@@ -890,6 +1024,16 @@ kenBtn.LayoutOrder = 5
 kenBtn.Parent = panel
 Instance.new("UICorner", kenBtn).CornerRadius = UDim.new(0, 3)
 
+local npcBtn = Instance.new("TextButton")
+npcBtn.Size = UDim2.new(0, 50, 0, 16)
+npcBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+npcBtn.BorderSizePixel = 0
+npcBtn.Font = Enum.Font.GothamBold
+npcBtn.TextSize = 9
+npcBtn.LayoutOrder = 6
+npcBtn.Parent = panel
+Instance.new("UICorner", npcBtn).CornerRadius = UDim.new(0, 3)
+
 local arrowBtn = Instance.new("TextButton")
 arrowBtn.Size = UDim2.new(0, 16, 0, 28)
 arrowBtn.Position = UDim2.new(1, 2, 0.5, -14)
@@ -931,16 +1075,15 @@ lockBtn.TextColor3 = Color3.fromRGB(120, 255, 140)
 lockBtn.Font = Enum.Font.GothamBold
 lockBtn.TextSize = 12
 lockBtn.Text = "Cam Lock: OFF"
-lockBtn.Visible = true -- Open by default
+lockBtn.Visible = true
 lockBtn.Parent = gui
 Instance.new("UICorner", lockBtn).CornerRadius = UDim.new(0, 6)
 makeDraggable(lockBtn)
 
--- Small Dot Button for Name ESP near Cam Lock
 local espDotBtn = Instance.new("TextButton")
 espDotBtn.Size = UDim2.new(0, 28, 0, 28)
 espDotBtn.Position = UDim2.new(0.5, 80, 0, 18)
-espDotBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80) -- Red when off by default
+espDotBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
 espDotBtn.BorderSizePixel = 0
 espDotBtn.Text = "ESP"
 espDotBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -950,15 +1093,10 @@ espDotBtn.Visible = true
 espDotBtn.Parent = gui
 Instance.new("UICorner", espDotBtn).CornerRadius = UDim.new(0, 6)
 makeDraggable(espDotBtn)
-
 espDotBtn.MouseButton1Click:Connect(function()
 	nameEspEnabled = not nameEspEnabled
-	if nameEspEnabled then
-		espDotBtn.BackgroundColor3 = Color3.fromRGB(80, 255, 120) -- Green when on
-	else
-		espDotBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80) -- Red when off
-		clearNameEsp()
-	end
+	espDotBtn.BackgroundColor3 = nameEspEnabled and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(255, 80, 80)
+	if not nameEspEnabled then clearNameEsp() end
 end)
 
 targetLabel = Instance.new("TextLabel")
@@ -969,12 +1107,9 @@ targetLabel.Text = "Target: none"
 targetLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
 targetLabel.Font = Enum.Font.GothamBold
 targetLabel.TextSize = 12
-targetLabel.Visible = true -- Open by default
+targetLabel.Visible = true
 targetLabel.Parent = gui
 
--- ============================================================
--- PLAYER DROPDOWN UI SETUP
--- ============================================================
 dropdownBtn = Instance.new("TextButton")
 dropdownBtn.Size = UDim2.new(0, 150, 0, 24)
 dropdownBtn.Position = UDim2.new(0.5, -75, 0, 70)
@@ -984,7 +1119,7 @@ dropdownBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 dropdownBtn.Font = Enum.Font.GothamBold
 dropdownBtn.TextSize = 11
 dropdownBtn.Text = "Select Target v"
-dropdownBtn.Visible = true -- Open by default
+dropdownBtn.Visible = true
 dropdownBtn.Parent = gui
 Instance.new("UICorner", dropdownBtn).CornerRadius = UDim.new(0, 6)
 makeDraggable(dropdownBtn)
@@ -1023,28 +1158,21 @@ end)
 
 refreshPlayerDropdown = function()
 	for _, child in ipairs(dropdownScroll:GetChildren()) do
-		if child:IsA("TextButton") then
-			child:Destroy()
-		end
+		if child:IsA("TextButton") then child:Destroy() end
 	end
-
 	for _, v in ipairs(Players:GetPlayers()) do
 		if v ~= plr then
 			local pBtn = Instance.new("TextButton")
-			pBtn.Size = UDim2.new(1, 0, 0, 26) -- Slightly taller for larger text
+			pBtn.Size = UDim2.new(1, 0, 0, 26)
 			pBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 			pBtn.BorderSizePixel = 0
 			pBtn.Font = Enum.Font.GothamBold
-			pBtn.TextSize = 12 -- Larger dropdown text size
+			pBtn.TextSize = 12
 			pBtn.RichText = true
-			
-			-- Display name bright yellow, username green in brackets
 			pBtn.Text = '<font color="rgb(255,255,0)">' .. v.DisplayName .. '</font> <font color="rgb(80,255,120)">(@' .. v.Name .. ')</font>'
 			pBtn.TextTruncate = Enum.TextTruncate.AtEnd
-
 			pBtn.Parent = dropdownScroll
 			Instance.new("UICorner", pBtn).CornerRadius = UDim.new(0, 4)
-
 			pBtn.MouseButton1Click:Connect(function()
 				if isValidTarget(v) then
 					currentTarget = v
@@ -1066,13 +1194,10 @@ end
 
 Players.PlayerAdded:Connect(refreshPlayerDropdown)
 Players.PlayerRemoving:Connect(refreshPlayerDropdown)
-
 task.spawn(function()
 	while true do
 		task.wait(3)
-		if dropdownScroll.Visible then
-			refreshPlayerDropdown()
-		end
+		if dropdownScroll.Visible then refreshPlayerDropdown() end
 	end
 end)
 
@@ -1092,6 +1217,10 @@ local function refreshKenUI()
 	kenBtn.Text = autoKenEnabled and "Ken:ON" or "Ken:OFF"
 	kenBtn.TextColor3 = autoKenEnabled and Color3.fromRGB(255, 200, 80) or Color3.fromRGB(180, 180, 180)
 end
+local function refreshNpcUI()
+	npcBtn.Text = npcModeEnabled and "NPC:ON" or "NPC:OFF"
+	npcBtn.TextColor3 = npcModeEnabled and Color3.fromRGB(255, 120, 80) or Color3.fromRGB(180, 180, 180)
+end
 
 local function setPanelHidden(hidden)
 	panelHidden = hidden
@@ -1100,12 +1229,13 @@ local function setPanelHidden(hidden)
 	antiStunBtn.Visible = not hidden
 	soruBtn.Visible = not hidden
 	kenBtn.Visible = not hidden
+	npcBtn.Visible = not hidden
 	if hidden then
 		panel.Size = UDim2.new(0, 20, 0, 32)
 		arrowBtn.Text = "»"
 		arrowBtn.Position = UDim2.new(0, 2, 0.5, -14)
 	else
-		panel.Size = UDim2.new(0, 58, 0, 130)
+		panel.Size = UDim2.new(0, 58, 0, 150)
 		arrowBtn.Text = "«"
 		arrowBtn.Position = UDim2.new(1, 2, 0.5, -14)
 	end
@@ -1115,11 +1245,11 @@ refreshMasterUI()
 refreshAntiStunUI()
 refreshSoruUI()
 refreshKenUI()
+refreshNpcUI()
 setPanelHidden(true)
 updateTargetLabel()
 refreshPlayerDropdown()
 
--- Green square button toggles Cam Lock elements visibility
 openBtn.MouseButton1Click:Connect(function()
 	local newState = not lockBtn.Visible
 	lockBtn.Visible = newState
@@ -1139,6 +1269,7 @@ masterBtn.MouseButton1Click:Connect(function()
 	if not silentAimEnabled then
 		clearTarget()
 		clearAllHighlights()
+		currentNpc = nil
 	end
 	refreshMasterUI()
 	SaveConfig()
@@ -1160,11 +1291,35 @@ kenBtn.MouseButton1Click:Connect(function()
 	autoKenEnabled = not autoKenEnabled
 	refreshKenUI()
 	SaveConfig()
-	if autoKenEnabled then
-		startAutoKen()
+	if autoKenEnabled then startAutoKen() else stopAutoKen() end
+end)
+
+npcBtn.MouseButton1Click:Connect(function()
+	npcModeEnabled = not npcModeEnabled
+	if npcModeEnabled then
+		_G.AimMethod = true
+		camLockOn = true
+		currentNpc = getNearestEnemy(500)
+		if currentNpc then
+			notify("NPC: " .. currentNpc.Name)
+			if lockBtn then
+				lockBtn.Text = "Cam Lock: NPC"
+				lockBtn.TextColor3 = Color3.fromRGB(255, 140, 60)
+			end
+		else
+			notify("No enemies nearby")
+		end
 	else
-		stopAutoKen()
+		currentNpc = nil
+		if lockBtn and not (currentTarget and isValidTarget(currentTarget)) then
+			lockBtn.Text = "Cam Lock: OFF"
+			lockBtn.TextColor3 = Color3.fromRGB(120, 255, 140)
+			camLockOn = false
+		end
 	end
+	refreshNpcUI()
+	updateTargetLabel()
+	SaveConfig()
 end)
 
 arrowBtn.MouseButton1Click:Connect(function()
@@ -1179,18 +1334,32 @@ lockBtn.MouseButton1Click:Connect(function()
 		lockBtn.TextColor3 = Color3.fromRGB(120, 255, 140)
 		refreshPlayerDropdown()
 	else
-		if not currentTarget or not isValidTarget(currentTarget) then
-			selectTargetFOV()
-		end
-		if currentTarget and isValidTarget(currentTarget) then
-			camLockOn = true
-			_G.AimMethod = true
-			lockBtn.Text = "Cam Lock: " .. currentTarget.DisplayName
-			lockBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
-			updateTargetLabel()
-			refreshPlayerDropdown()
+		if npcModeEnabled then
+			currentNpc = getNearestEnemy(500)
+			if currentNpc then
+				camLockOn = true
+				_G.AimMethod = true
+				lockBtn.Text = "Cam Lock: NPC"
+				lockBtn.TextColor3 = Color3.fromRGB(255, 140, 60)
+				updateTargetLabel()
+			else
+				notify("No enemies nearby")
+			end
+		else
+			if not currentTarget or not isValidTarget(currentTarget) then
+				selectTargetFOV()
+			end
+			if currentTarget and isValidTarget(currentTarget) then
+				camLockOn = true
+				_G.AimMethod = true
+				lockBtn.Text = "Cam Lock: " .. currentTarget.DisplayName
+				lockBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+				updateTargetLabel()
+				refreshPlayerDropdown()
+			end
 		end
 	end
 end)
 
-print("[SilentAim] Full Fix Script Loaded")
+print("[SilentAim] FINAL + NPC mode under Ken")
+print("  NPC:ON = cam lock + silent aim on workspace.Enemies")
