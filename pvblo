@@ -1,10 +1,3 @@
-nia
-vivacious_hare_10720
-Invisible
-﻿
-nia — 9/27/2026 2:49 PM
-all working
-nia — Yesterday at 10:53 AM
 --pvp script blox fruits
 -- ============================================================
 -- Silent Aim + Cam Lock + Anti Stun + Soru + Auto Ken + NPC Mode
@@ -1375,5 +1368,3 @@ lockBtn.MouseButton1Click:Connect(function()
 end)
 
 print("[SilentAim] FINAL | Cam lock → HEAD | toggles idle when OFF")
-message.txt
-43 KB
