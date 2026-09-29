@@ -1,4 +1,4 @@
--- LAG FIXED + noclip auto: ON during fly/safe/tween/raid float | OFF when none active
+-- LAG FIXED + noclip: full collision off during island tween/safe/raid; light path for fly
 -- added raid island esp
 -- Islands Added
 -- Ultra-optimized (0-Lag Fruit ESP with exact name matching & _WorldOrigin scan)
@@ -103,43 +103,64 @@ local function StartCustomTween(targetPos, targetName, onComplete)
 	if not char then return end
 	local hrp = char:FindFirstChild("HumanoidRootPart")
 	if not hrp then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
 
 	currentTweenTarget = targetName
 	noclip = true
 
+	-- Kill physics collision for the whole character (once + every frame below)
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CanCollide = false
+		end
+	end
+
 	local endPos = targetPos
+	-- Pure CFrame travel (LinearVelocity still hits terrain/water)
 
-	tweenAttachment = Instance.new("Attachment", hrp)
-	tweenVelocity = Instance.new("LinearVelocity", hrp)
-	tweenVelocity.Attachment0 = tweenAttachment
-	tweenVelocity.MaxForce = math.huge
-	tweenVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
-
-	tweenGyro = Instance.new("AlignOrientation", hrp)
-	tweenGyro.Attachment0 = tweenAttachment
-	tweenGyro.Mode = Enum.OrientationAlignmentMode.OneAttachment
-	tweenGyro.MaxTorque = math.huge
-	tweenGyro.Responsiveness = 200
-
-	activeTweenConnection = RunService.Heartbeat:Connect(function()
+	activeTweenConnection = RunService.Heartbeat:Connect(function(dt)
+		char = LocalPlayer.Character
+		if not char then
+			StopAllTweens()
+			return
+		end
+		hrp = char:FindFirstChild("HumanoidRootPart")
+		hum = char:FindFirstChildOfClass("Humanoid")
 		if not hrp or not hrp.Parent then
 			StopAllTweens()
 			return
 		end
 
+		noclip = true
+		for _, part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+		if hum then
+			hum.PlatformStand = false
+			hum.Sit = false
+		end
+
 		local currentPos = hrp.Position
-		local direction = (endPos - currentPos)
+		local direction = endPos - currentPos
 		local distance = direction.Magnitude
 
 		if distance < 5 then
+			hrp.CFrame = CFrame.new(endPos)
 			StopAllTweens()
 			if onComplete then onComplete() end
 			return
 		end
 
-		local currentSpeed = math.min(flySpeed, distance * 20)
-		tweenVelocity.VectorVelocity = direction.Unit * currentSpeed
-		tweenGyro.CFrame = CFrame.new(currentPos, endPos)
+		-- Move by CFrame so walls/water cannot block
+		local speed = math.max(flySpeed, 80)
+		local step = math.min(distance, speed * math.max(dt, 1/60))
+		local nextPos = currentPos + direction.Unit * step
+		hrp.CFrame = CFrame.new(nextPos, endPos)
 	end)
 end
 
@@ -1686,17 +1707,27 @@ RunService.RenderStepped:Connect(function()
 	end
 end)
 
--- Noclip (lag-safe: only character BaseParts, skip if off)
+-- Noclip: full parts during tween/safe/raid float; light path for fly only
 RunService.Stepped:Connect(function()
 	if not noclip then return end
 	local char = LocalPlayer.Character
 	if not char then return end
-	for _, part in ipairs(char:GetChildren()) do
-		if part:IsA("BasePart") then
-			part.CanCollide = false
-		elseif part:IsA("Accessory") then
-			local h = part:FindFirstChild("Handle")
-			if h and h:IsA("BasePart") then h.CanCollide = false end
+	-- Island/fruit tween + safe + raid float need nested parts disabled
+	if activeTweenConnection or safeModeTriggered or raidFloatEnabled then
+		for _, part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	else
+		-- Fly only: light path (less lag)
+		for _, part in ipairs(char:GetChildren()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			elseif part:IsA("Accessory") then
+				local h = part:FindFirstChild("Handle")
+				if h and h:IsA("BasePart") then h.CanCollide = false end
+			end
 		end
 	end
 end)
@@ -2101,4 +2132,4 @@ if raidESPEnabled then
 	CreateRaidESP()
 end
 
-print("might be this! added sea rework")
+print("might be this! added sea reworkthr")
