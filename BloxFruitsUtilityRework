@@ -2132,4 +2132,83 @@ if raidESPEnabled then
 	CreateRaidESP()
 end
 
+--FULLMOON
+-- ============================================================
+-- MOON PHASE CHECKER GUI (Blox Fruits)
+-- Displays massive text at the top of the screen based on moon
+-- ============================================================
+
+-- Wait for the game to fully load before checking
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+-- Give the game an extra 2 seconds to load the lighting textures
+task.wait(2)
+
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local plr = Players.LocalPlayer
+
+-- Safely get a place to put the UI (CoreGui if executor supports it, otherwise PlayerGui)
+local guiParent = nil
+pcall(function() guiParent = gethui and gethui() or game:GetService("CoreGui") end)
+if not guiParent or not guiParent:FindFirstChildWhichIsA("ScreenGui") then
+    guiParent = plr:WaitForChild("PlayerGui")
+end
+
+-- Create the ScreenGui
+local moonGui = Instance.new("ScreenGui")
+moonGui.Name = "MoonPhaseNotifier"
+moonGui.ResetOnSpawn = false
+moonGui.Parent = guiParent
+
+-- Create the huge text label across the top of the screen
+local textLabel = Instance.new("TextLabel")
+textLabel.Size = UDim2.new(1, 0, 0, 150) -- Spans left to right, 150 pixels tall
+textLabel.Position = UDim2.new(0, 0, 0, 0) -- Top of the screen
+textLabel.Font = Enum.Font.GothamBlack
+textLabel.TextScaled = true -- Makes the text as big as possible
+textLabel.TextStrokeTransparency = 0 -- Adds a black outline to the text so it's always readable
+textLabel.Parent = moonGui
+
+-- Find the Sky and check the Moon Texture
+local Sky = Lighting:FindFirstChildOfClass("Sky")
+
+if Sky then
+    local textureId = tostring(Sky.MoonTextureId)
+    
+    if textureId:match("9709149431") then
+        -- FULL MOON
+        textLabel.Text = "FULL MOON IS ACTIVE!"
+        textLabel.TextColor3 = Color3.fromRGB(255, 50, 50) -- Bright Red
+        textLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Black background
+        textLabel.BackgroundTransparency = 0 -- Solid background
+        textLabel.TextStrokeTransparency = 1 -- Remove outline since background is black
+        
+    elseif textureId:match("9709149052") then
+        -- 75% MOON (Waxing Gibbous)
+        textLabel.Text = "75% MOON RIGHT NOW! (WAXING GIBBOUS)"
+        textLabel.TextColor3 = Color3.fromRGB(80, 255, 80) -- Green colour
+        textLabel.BackgroundTransparency = 1 -- Invisible background
+        
+    else
+        -- NO FULL MOON
+        textLabel.Text = "NO FULL MOON TODAY"
+        textLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- White text
+        textLabel.BackgroundTransparency = 1 -- Invisible background
+    end
+else
+    -- Fallback if Sky isn't loaded or found
+    textLabel.Text = "COULD NOT FIND SKY TEXTURE"
+    textLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    textLabel.BackgroundTransparency = 1
+end
+
+-- Destroy the GUI completely after 15 seconds
+task.delay(15, function()
+    if moonGui then
+        moonGui:Destroy()
+    end
+end)
+
 print("might be this! added sea reworkthr")
