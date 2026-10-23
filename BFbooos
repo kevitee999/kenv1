@@ -1,4 +1,6 @@
---fixed
+-- ========================================================
+-- BOSS HOP SCRIPT WITH AUTO-FLOAT INTEGRATION
+-- ========================================================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -346,6 +348,71 @@ local function ServerHop(preferRegion)
 end
 
 -- ========================================================
+-- 6. BEAUTIFUL PIRATE AUTO-FLOAT MODULE (100 Stud Range)
+-- ========================================================
+task.spawn(function()
+    local FLOAT_HEIGHT = 35
+    local MAX_ACTIVATION_DIST = 100
+
+    local function getChar()
+        local c = LocalPlayer.Character
+        if c then return c end
+        local folder = workspace:FindFirstChild("Characters")
+        if folder then return folder:FindFirstChild(LocalPlayer.Name) end
+        return nil
+    end
+
+    local function getRootPart(model)
+        if not model then return nil end
+        return model:FindFirstChild("HumanoidRootPart") 
+            or model:FindFirstChild("Head") 
+            or model:FindFirstChildWhichIsA("BasePart")
+    end
+
+    local function isNpcAlive(npc)
+        if not npc or not npc.Parent then return false end
+        local hum = npc:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health <= 0 then return false end
+        return true
+    end
+
+    RunService.Heartbeat:Connect(function(dt)
+        -- Only run float behavior if hopping isn't active
+        if isHopping then return end
+
+        local enemiesFolder = workspace:FindFirstChild("Enemies")
+        local pirate = enemiesFolder and enemiesFolder:FindFirstChild("Beautiful Pirate")
+        
+        local myChar = getChar()
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+        
+        if pirate and isNpcAlive(pirate) and myHRP then
+            local pirateRoot = getRootPart(pirate)
+            if pirateRoot then
+                local dist = (myHRP.Position - pirateRoot.Position).Magnitude
+                if dist <= MAX_ACTIVATION_DIST then
+                    if myHum then
+                        myHum.PlatformStand = true
+                    end
+                    local targetPos = pirateRoot.Position + Vector3.new(0, FLOAT_HEIGHT, 0)
+                    local goalCF = CFrame.new(targetPos)
+                    
+                    myHRP.CFrame = myHRP.CFrame:Lerp(goalCF, math.clamp(dt * 15, 0, 1))
+                    myHRP.AssemblyLinearVelocity = Vector3.zero
+                    myHRP.AssemblyAngularVelocity = Vector3.zero
+                    return
+                end
+            end
+        end
+        
+        if myHum and myHum.PlatformStand then
+            myHum.PlatformStand = false
+        end
+    end)
+end)
+
+-- ========================================================
 -- MAIN EXECUTION FLOW
 -- ========================================================
 task.spawn(function()
@@ -379,12 +446,15 @@ task.spawn(function()
         return
     end
 
-    -- Step 4: Boss Combat Loop
-    Notify("Boss Found", "Engaging " .. BossName + "!", 3)
+    -- Step 4: Boss Combat Loop (Auto-float takes over when within 100 studs, Fast Attack handles damage)
+    Notify("Boss Found", "Engaging " .. BossName .. "!", 3)
     while boss and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 do
         local bossHrp = boss:FindFirstChild("HumanoidRootPart")
         if bossHrp then
-            tweenTo(bossHrp.CFrame * CFrame.new(0, 10, 0))
+            local dist = (LocalPlayer.Character.HumanoidRootPart.Position - bossHrp.Position).Magnitude
+            if dist > 100 then
+                tweenTo(bossHrp.CFrame * CFrame.new(0, 10, 0))
+            end
         end
         task.wait(0.1)
     end
@@ -399,17 +469,13 @@ end)
 -- Allows you to walk through walls and solid objects
 -- ============================================================
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local plr = Players.LocalPlayer
-
 local noclipEnabled = true
 
 local function getChar()
-	local c = plr.Character
+	local c = LocalPlayer.Character
 	if c then return c end
 	local folder = workspace:FindFirstChild("Characters")
-	if folder then return folder:FindFirstChild(plr.Name) end
+	if folder then return folder:FindFirstChild(LocalPlayer.Name) end
 	return nil
 end
 
@@ -418,9 +484,12 @@ RunService.Stepped:Connect(function()
 	if not noclipEnabled then return end
 	local char = getChar()
 	if char then
-		for _, part in ipairs(char:GetDescendants()) do
-			if part:IsA("BasePart") and part.CanCollide then
-				part.CanCollide = false
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			for _, part in ipairs(char:GetDescendants()) do
+				if part:IsA("BasePart") and part.CanCollide then
+					part.CanCollide = false
+				end
 			end
 		end
 	end
