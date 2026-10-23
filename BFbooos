@@ -15,10 +15,10 @@ getgenv().AutoEquipSword = true
 getgenv().FastAttack = true
 getgenv().AutoJoinPirates = true
 
-local TargetPos = Vector3.new(-5606, 58, 8626)
-local BossName = "Magma Admiral"
-local FlySpeed = 200
-local TARGET_REGION = "Singapore" -- Set to "" for any region
+local TargetPos = Vector3.new(5368, 23, -64)
+local BossName = "Beautiful Pirate"
+local FlySpeed = 300
+local TARGET_REGION = "Singapore", "India" -- Set to "" for any region
 
 -- ========================================================
 -- UI NOTIFICATION SYSTEM (BOTTOM RIGHT)
@@ -393,3 +393,37 @@ task.spawn(function()
     Notify("Target Defeated", BossName .. " killed! Flying up & hopping...", 4)
     ServerHop(TARGET_REGION)
 end)
+
+-- ============================================================
+-- NOCLIP SCRIPT (Xeno Executor Compatible)
+-- Allows you to walk through walls and solid objects
+-- ============================================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local plr = Players.LocalPlayer
+
+local noclipEnabled = true
+
+local function getChar()
+	local c = plr.Character
+	if c then return c end
+	local folder = workspace:FindFirstChild("Characters")
+	if folder then return folder:FindFirstChild(plr.Name) end
+	return nil
+end
+
+-- Continuous noclip loop
+RunService.Stepped:Connect(function()
+	if not noclipEnabled then return end
+	local char = getChar()
+	if char then
+		for _, part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") and part.CanCollide then
+				part.CanCollide = false
+			end
+		end
+	end
+end)
+
+print("[Noclip] Activated! You can now walk through walls.")
